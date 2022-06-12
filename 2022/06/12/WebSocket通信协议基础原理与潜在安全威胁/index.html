@@ -7,13 +7,37 @@
   
   <title>Hexo</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta property="og:type" content="website">
+  <meta name="description" content="前言最近在项目上遇到了一个 Web 系统和本地 PC 的 exe 客户端程序采用了 WebSocket 通信，exe 客户端程序做了登录、鉴权机制并采用 HTTPS 协议与后台微服务进行通信。由于原来没有了解过 WebSocket，所以一开始上来也比较懵，接着学习了下 WebSocket 的原理和攻击模式，竟然发现一个严重漏洞——该 Web 系统虽然也做了登录控制，但是与 exe 程序之间的 We">
+<meta property="og:type" content="article">
 <meta property="og:title" content="Hexo">
-<meta property="og:url" content="http://example.com/index.html">
+<meta property="og:url" content="http://example.com/2022/06/12/WebSocket%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE%E5%9F%BA%E7%A1%80%E5%8E%9F%E7%90%86%E4%B8%8E%E6%BD%9C%E5%9C%A8%E5%AE%89%E5%85%A8%E5%A8%81%E8%83%81/index.html">
 <meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="前言最近在项目上遇到了一个 Web 系统和本地 PC 的 exe 客户端程序采用了 WebSocket 通信，exe 客户端程序做了登录、鉴权机制并采用 HTTPS 协议与后台微服务进行通信。由于原来没有了解过 WebSocket，所以一开始上来也比较懵，接着学习了下 WebSocket 的原理和攻击模式，竟然发现一个严重漏洞——该 Web 系统虽然也做了登录控制，但是与 exe 程序之间的 We">
 <meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/b3f216feae7845edb4d56d8d65da84f4.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/4a7fe1ac3a5649ac9b3413233d86a22c.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/71c6d2ec276c4fed8cd27db267ec332c.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/2707218303e749999fdacdba3096436f.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/9c2656e1ac674f7fa745c20f52a01818.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/5105f4b999e04e4caabf65481806ad36.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/0352ce88034a40c2932c5c59331d746f.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/584730448454415fae5cf63c3674d99d.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/0022ce2a71f9481da29247ee8bdfab02.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/eed1f4cfee6748a79d0ce185e6225929.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/09c3d16e28204ab09c2aabaf35f0a98c.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/e681a67164844e6ba80c4704bd090374.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/e89b2b0fb22d4d3a8bc7fb4cecceba7e.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/a0b4a2ce5e3f489aa56ff90cae4c8323.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/a44493dbe68e4864ba08da32bc4b8762.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/32155a732b7746b88550f68b27bf5354.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/76c94431d9dc4c95848c3804bf094c00.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/2d84079443644e7899998326ef6e44d0.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/078d3663863c45dd8e23a618b5d3811a.png">
+<meta property="article:published_time" content="2022-06-12T08:43:56.165Z">
+<meta property="article:modified_time" content="2022-06-12T08:45:08.486Z">
 <meta property="article:author" content="John Doe">
 <meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://img-blog.csdnimg.cn/b3f216feae7845edb4d56d8d65da84f4.png">
   
     <link rel="alternate" href="/atom.xml" title="Hexo" type="application/atom+xml">
   
@@ -62,9 +86,7 @@
   </div>
 </header>
       <div class="outer">
-        <section id="main">
-  
-    <article id="post-WebSocket通信协议基础原理与潜在安全威胁" class="article article-type-post" itemscope itemprop="blogPost">
+        <section id="main"><article id="post-WebSocket通信协议基础原理与潜在安全威胁" class="article article-type-post" itemscope itemprop="blogPost">
   <div class="article-meta">
     <a href="/2022/06/12/WebSocket%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE%E5%9F%BA%E7%A1%80%E5%8E%9F%E7%90%86%E4%B8%8E%E6%BD%9C%E5%9C%A8%E5%AE%89%E5%85%A8%E5%A8%81%E8%83%81/" class="article-date">
   <time datetime="2022-06-12T08:43:56.165Z" itemprop="datePublished">2022-06-12</time>
@@ -206,60 +228,19 @@
     </footer>
   </div>
   
-</article>
-
-
+    
+<nav id="article-nav">
   
-    <article id="post-hello-world" class="article article-type-post" itemscope itemprop="blogPost">
-  <div class="article-meta">
-    <a href="/2022/06/12/hello-world/" class="article-date">
-  <time datetime="2022-06-12T05:26:03.301Z" itemprop="datePublished">2022-06-12</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
   
-    <h1 itemprop="name">
-      <a class="article-title" href="/2022/06/12/hello-world/">Hello World</a>
-    </h1>
+    <a href="/2022/06/12/hello-world/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">Hello World</div>
+    </a>
   
+</nav>
 
-      </header>
-    
-    <div class="article-entry" itemprop="articleBody">
-      
-        <p>Welcome to <a target="_blank" rel="noopener" href="https://hexo.io/">Hexo</a>! This is your very first post. Check <a target="_blank" rel="noopener" href="https://hexo.io/docs/">documentation</a> for more info. If you get any problems when using Hexo, you can find the answer in <a target="_blank" rel="noopener" href="https://hexo.io/docs/troubleshooting.html">troubleshooting</a> or you can ask me on <a target="_blank" rel="noopener" href="https://github.com/hexojs/hexo/issues">GitHub</a>.</p>
-<h2 id="Quick-Start"><a href="#Quick-Start" class="headerlink" title="Quick Start"></a>Quick Start</h2><h3 id="Create-a-new-post"><a href="#Create-a-new-post" class="headerlink" title="Create a new post"></a>Create a new post</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo new <span class="string">&quot;My New Post&quot;</span></span><br></pre></td></tr></table></figure>
-
-<p>More info: <a target="_blank" rel="noopener" href="https://hexo.io/docs/writing.html">Writing</a></p>
-<h3 id="Run-server"><a href="#Run-server" class="headerlink" title="Run server"></a>Run server</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo server</span><br></pre></td></tr></table></figure>
-
-<p>More info: <a target="_blank" rel="noopener" href="https://hexo.io/docs/server.html">Server</a></p>
-<h3 id="Generate-static-files"><a href="#Generate-static-files" class="headerlink" title="Generate static files"></a>Generate static files</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo generate</span><br></pre></td></tr></table></figure>
-
-<p>More info: <a target="_blank" rel="noopener" href="https://hexo.io/docs/generating.html">Generating</a></p>
-<h3 id="Deploy-to-remote-sites"><a href="#Deploy-to-remote-sites" class="headerlink" title="Deploy to remote sites"></a>Deploy to remote sites</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo deploy</span><br></pre></td></tr></table></figure>
-
-<p>More info: <a target="_blank" rel="noopener" href="https://hexo.io/docs/one-command-deployment.html">Deployment</a></p>
-
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="http://example.com/2022/06/12/hello-world/" data-id="cl4av8krj0000noi97rmqakjk" class="article-share-link">Share</a>
-      
-      
-    </footer>
-  </div>
   
 </article>
-
-
-  
-
 
 </section>
         
