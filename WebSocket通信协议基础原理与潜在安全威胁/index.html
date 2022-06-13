@@ -1,13 +1,14 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  
-
-  
-  <title>WebSocket通信协议基础原理与潜在安全威胁 | Tr0e</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta name="description" content="前言最近在项目上遇到了一个 Web 系统和本地 PC 的 exe 客户端程序采用了 WebSocket 通信，exe 客户端程序做了登录、鉴权机制并采用 HTTPS 协议与后台微服务进行通信。由于原来没有了解过 WebSocket，所以一开始上来也比较懵，接着学习了下 WebSocket 的原理和攻击模式，竟然发现一个严重漏洞——该 Web 系统虽然也做了登录控制，但是与 exe 程序之间的 We">
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="theme-color" content="#0078E7"><meta name="author" content="Tr0e"><meta name="copyright" content="Tr0e"><meta name="generator" content="Hexo 5.4.2"><meta name="theme" content="hexo-theme-yun"><title>WebSocket通信协议基础原理与潜在安全威胁 | Tr0e</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@900&amp;display=swap" media="print" onload="this.media='all'"><link rel="stylesheet" href="https://fastly.jsdelivr.net/npm/star-markdown-css@0.3.3/dist/yun/yun-markdown.min.css"><link rel="stylesheet" href="https://fastly.jsdelivr.net/npm/prism-theme-vars/base.css"><script src="https://fastly.jsdelivr.net/npm/scrollreveal/dist/scrollreveal.min.js" defer></script><script>function initScrollReveal() {
+  [".post-card",".markdown-body img"].forEach((target)=> {
+    ScrollReveal().reveal(target);
+  })
+}
+document.addEventListener("DOMContentLoaded", initScrollReveal);
+document.addEventListener("pjax:success", initScrollReveal);
+</script><link rel="icon" type="image/svg+xml" href="/yun.svg"><link rel="mask-icon" href="/yun.svg" color="#0078E7"><link rel="preload" href="/css/hexo-theme-yun.css" as="style"><link rel="prefetch" href="/js/sidebar.js" as="script"><link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin><link rel="preconnect" href="https://fastly.jsdelivr.net/npm/" crossorigin><script id="yun-config">
+    window.Yun = {}
+    window.CONFIG = {"hostname":"tr0e.github.io","root":"/","title":["Tr0e","Blog"],"version":"1.10.4","mode":"auto","copycode":true,"page":{"isPost":true},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}.","hits":"${hits} results found","hits_time":"${hits} results found in ${time} ms"},"anonymous_image":"https://cdn.yunyoujun.cn/img/avatar/none.jpg","say":{"api":"https://el-bot-api.vercel.app/api/words/young"},"fireworks":{"colors":null},"vendors":{"darken":"https://fastly.jsdelivr.net/npm/darken@1.5.0"}};
+  </script><link rel="stylesheet" href="/css/hexo-theme-yun.css"><script src="/js/hexo-theme-yun.js" type="module"></script><link rel="alternate" href="/atom.xml" title="Tr0e" type="application/atom+xml"><meta name="description" content="前言最近在项目上遇到了一个 Web 系统和本地 PC 的 exe 客户端程序采用了 WebSocket 通信，exe 客户端程序做了登录、鉴权机制并采用 HTTPS 协议与后台微服务进行通信。由于原来没有了解过 WebSocket，所以一开始上来也比较懵，接着学习了下 WebSocket 的原理和攻击模式，竟然发现一个严重漏洞——该 Web 系统虽然也做了登录控制，但是与 exe 程序之间的 We">
 <meta property="og:type" content="article">
 <meta property="og:title" content="WebSocket通信协议基础原理与潜在安全威胁">
 <meta property="og:url" content="https://tr0e.github.io/WebSocket%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE%E5%9F%BA%E7%A1%80%E5%8E%9F%E7%90%86%E4%B8%8E%E6%BD%9C%E5%9C%A8%E5%AE%89%E5%85%A8%E5%A8%81%E8%83%81/index.html">
@@ -37,78 +38,23 @@
 <meta property="article:modified_time" content="2022-06-12T08:55:34.838Z">
 <meta property="article:author" content="Tr0e">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="https://img-blog.csdnimg.cn/b3f216feae7845edb4d56d8d65da84f4.png">
-  
-    <link rel="alternate" href="/atom.xml" title="Tr0e" type="application/atom+xml">
-  
-  
-    <link rel="icon" href="/favicon.png">
-  
-  
-    <link href="//fonts.googleapis.com/css?family=Source+Code+Pro" rel="stylesheet" type="text/css">
-  
-  
-<link rel="stylesheet" href="/css/style.css">
-
-<meta name="generator" content="Hexo 5.4.2"></head>
-
-<body>
-  <div id="container">
-    <div id="wrap">
-      <header id="header">
-  <div id="banner"></div>
-  <div id="header-outer" class="outer">
-    <div id="header-title" class="inner">
-      <h1 id="logo-wrap">
-        <a href="/" id="logo">Tr0e</a>
-      </h1>
-      
-    </div>
-    <div id="header-inner" class="inner">
-      <nav id="main-nav">
-        <a id="main-nav-toggle" class="nav-icon"></a>
-        
-          <a class="main-nav-link" href="/">Home</a>
-        
-          <a class="main-nav-link" href="/archives">Archives</a>
-        
-      </nav>
-      <nav id="sub-nav">
-        
-          <a id="nav-rss-link" class="nav-icon" href="/atom.xml" title="RSS Feed"></a>
-        
-        <a id="nav-search-btn" class="nav-icon" title="Search"></a>
-      </nav>
-      <div id="search-form-wrap">
-        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://tr0e.github.io"></form>
-      </div>
-    </div>
-  </div>
-</header>
-      <div class="outer">
-        <section id="main"><article id="post-WebSocket通信协议基础原理与潜在安全威胁" class="article article-type-post" itemscope itemprop="blogPost">
-  <div class="article-meta">
-    <a href="/WebSocket%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE%E5%9F%BA%E7%A1%80%E5%8E%9F%E7%90%86%E4%B8%8E%E6%BD%9C%E5%9C%A8%E5%AE%89%E5%85%A8%E5%A8%81%E8%83%81/" class="article-date">
-  <time datetime="2022-06-12T08:43:56.165Z" itemprop="datePublished">2022-06-12</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 class="article-title" itemprop="name">
-      WebSocket通信协议基础原理与潜在安全威胁
-    </h1>
-  
-
-      </header>
-    
-    <div class="article-entry" itemprop="articleBody">
-      
-        <h1 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h1><p>最近在项目上遇到了一个 Web 系统和本地 PC 的 exe 客户端程序采用了 WebSocket 通信，exe 客户端程序做了登录、鉴权机制并采用 HTTPS 协议与后台微服务进行通信。由于原来没有了解过 WebSocket，所以一开始上来也比较懵，接着学习了下 WebSocket 的原理和攻击模式，竟然发现一个严重漏洞——该 Web 系统虽然也做了登录控制，但是与 exe 程序之间的 WebSocket 却没做鉴权机制……这直接导致攻击者可以绕过 Web 系统和 exe 程序本身的鉴权机制，直接通过 Web 系统 WebScoket 的通信方式来实现对后台业务服务器资源数据的未授权访问。<br><img src="https://img-blog.csdnimg.cn/b3f216feae7845edb4d56d8d65da84f4.png" alt="在这里插入图片描述"><br>本文来记录学习下 WebSocket 全双工通信的基本原理与鉴权机制，并分析 WebSocket 常见的安全风险。</p>
+<meta name="twitter:image" content="https://img-blog.csdnimg.cn/b3f216feae7845edb4d56d8d65da84f4.png"><script>(function() {
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+  const setting = localStorage.getItem('darken-mode') || 'auto'
+  if (setting === 'dark' || (prefersDark && setting !== 'light'))
+    document.documentElement.classList.toggle('dark', true)
+})()</script></head><body><script src="https://code.iconify.design/2/2.1.1/iconify.min.js"></script><script>// Define global variable
+IconifyProviders = {
+  // Empty prefix: overwrite default API provider configuration
+  '': {
+    // Use custom API first, use Iconify public API as backup
+    resources: [
+        'https://api.iconify.design',
+    ],
+    // Wait for 1 second before switching API hosts
+    rotate: 1000,
+  },
+};</script><script defer src="https://fastly.jsdelivr.net/npm/animejs@latest"></script><script defer src="/js/ui/fireworks.js" type="module"></script><canvas class="fireworks"></canvas><div class="container"><a class="sidebar-toggle hty-icon-button" id="menu-btn"><div class="hamburger hamburger--spin" type="button"><span class="hamburger-box"><span class="hamburger-inner"></span></span></div></a><div class="sidebar-toggle sidebar-overlay"></div><aside class="sidebar"><script src="/js/sidebar.js" type="module"></script><ul class="sidebar-nav"><li class="sidebar-nav-item sidebar-nav-toc hty-icon-button sidebar-nav-active" data-target="post-toc-wrap" title="Table of Contents"><span class="icon iconify" data-icon="ri:list-ordered"></span></li><li class="sidebar-nav-item sidebar-nav-overview hty-icon-button" data-target="site-overview-wrap" title="Overview"><span class="icon iconify" data-icon="ri:passport-line"></span></li></ul><div class="sidebar-panel" id="site-overview-wrap"><div class="site-info fix-top"><a class="site-author-avatar" href="/about/" title="Tr0e"><img width="96" loading="lazy" src="/images/Tr0e.jpg" alt="Tr0e"></a><div class="site-author-name"><a href="/about/">Tr0e</a></div><span class="site-name">Tr0e</span><sub class="site-subtitle"></sub><div class="site-description"></div></div><nav class="site-state"><a class="site-state-item hty-icon-button icon-home" href="/" title="Home"><span class="site-state-item-icon"><span class="icon iconify" data-icon="ri:home-4-line"></span></span></a><div class="site-state-item"><a href="/archives/" title="Archives"><span class="site-state-item-icon"><span class="icon iconify" data-icon="ri:archive-line"></span></span><span class="site-state-item-count">2</span></a></div><div class="site-state-item"><a href="/categories/" title="Categories"><span class="site-state-item-icon"><span class="icon iconify" data-icon="ri:folder-2-line"></span></span><span class="site-state-item-count">0</span></a></div><div class="site-state-item"><a href="/tags/" title="Tags"><span class="site-state-item-icon"><span class="icon iconify" data-icon="ri:price-tag-3-line"></span></span><span class="site-state-item-count">0</span></a></div><a class="site-state-item hty-icon-button" target="_blank" rel="noopener" href="https://yun.yunyoujun.cn" title="文档"><span class="site-state-item-icon"><span class="icon iconify" data-icon="ri:settings-line"></span></span></a></nav><hr style="margin-bottom:0.5rem"><hr style="margin:0.5rem 1rem"><div class="links"><a class="links-item hty-icon-button" href="/links/" title="我的小伙伴们" style="color:dodgerblue"><span class="icon iconify" data-icon="ri:genderless-line"></span></a></div><br><a class="links-item hty-icon-button" id="toggle-mode-btn" href="javascript:;" title="Mode" style="color: #f1cb64"><span class="icon iconify" data-icon="ri:contrast-2-line"></span></a></div><div class="sidebar-panel sidebar-panel-active" id="post-toc-wrap"><div class="post-toc"><div class="post-toc-content"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#%E5%89%8D%E8%A8%80"><span class="toc-number">1.</span> <span class="toc-text">前言</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#WebSocket"><span class="toc-number">2.</span> <span class="toc-text">WebSocket</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%8D%8F%E8%AE%AE%E5%9F%BA%E7%A1%80"><span class="toc-number">2.1.</span> <span class="toc-text">协议基础</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%BB%BA%E7%AB%8B%E8%BF%9E%E6%8E%A5"><span class="toc-number">2.2.</span> <span class="toc-text">建立连接</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%A4%BA%E4%BE%8B%E7%A8%8B%E5%BA%8F"><span class="toc-number">2.3.</span> <span class="toc-text">示例程序</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Burp%E6%8A%93%E5%8C%85"><span class="toc-number">2.4.</span> <span class="toc-text">Burp抓包</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E5%AE%89%E5%85%A8%E5%A8%81%E8%83%81"><span class="toc-number">3.</span> <span class="toc-text">安全威胁</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E9%89%B4%E6%9D%83%E7%BC%BA%E5%A4%B1"><span class="toc-number">3.1.</span> <span class="toc-text">鉴权缺失</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%8A%AB%E6%8C%81%E6%BC%8F%E6%B4%9E"><span class="toc-number">3.2.</span> <span class="toc-text">劫持漏洞</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%8B%92%E7%BB%9D%E6%9C%8D%E5%8A%A1"><span class="toc-number">3.3.</span> <span class="toc-text">拒绝服务</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%B3%A8%E5%85%A5%E6%BC%8F%E6%B4%9E"><span class="toc-number">3.4.</span> <span class="toc-text">注入漏洞</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E6%80%BB%E7%BB%93"><span class="toc-number">4.</span> <span class="toc-text">总结</span></a></li></ol></div></div></div></aside><main class="sidebar-translate" id="content"><div id="post"><article class="hty-card post-block" itemscope itemtype="https://schema.org/Article" style="--smc-primary:#0078E7;"><link itemprop="mainEntityOfPage" href="https://tr0e.github.io/WebSocket%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE%E5%9F%BA%E7%A1%80%E5%8E%9F%E7%90%86%E4%B8%8E%E6%BD%9C%E5%9C%A8%E5%AE%89%E5%85%A8%E5%A8%81%E8%83%81/"><span hidden itemprop="author" itemscope itemtype="https://schema.org/Person"><meta itemprop="name" content="Tr0e"><meta itemprop="description"></span><span hidden itemprop="publisher" itemscope itemtype="https://schema.org/Organization"><meta itemprop="name" content="Tr0e"></span><header class="post-header"><h1 class="post-title" itemprop="name headline">WebSocket通信协议基础原理与潜在安全威胁</h1><div class="post-meta"><div class="post-time"><span class="post-meta-item-icon"><span class="icon iconify" data-icon="ri:calendar-line"></span></span> <time title="Created: 2022-06-12 16:43:56" itemprop="dateCreated datePublished" datetime="2022-06-12T16:43:56+08:00">2022-06-12</time></div><div class="post-classify"></div></div></header><section class="post-body" itemprop="articleBody"><div class="post-content markdown-body"><h1 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h1><p>最近在项目上遇到了一个 Web 系统和本地 PC 的 exe 客户端程序采用了 WebSocket 通信，exe 客户端程序做了登录、鉴权机制并采用 HTTPS 协议与后台微服务进行通信。由于原来没有了解过 WebSocket，所以一开始上来也比较懵，接着学习了下 WebSocket 的原理和攻击模式，竟然发现一个严重漏洞——该 Web 系统虽然也做了登录控制，但是与 exe 程序之间的 WebSocket 却没做鉴权机制……这直接导致攻击者可以绕过 Web 系统和 exe 程序本身的鉴权机制，直接通过 Web 系统 WebScoket 的通信方式来实现对后台业务服务器资源数据的未授权访问。<br><img src="https://img-blog.csdnimg.cn/b3f216feae7845edb4d56d8d65da84f4.png" alt="在这里插入图片描述"><br>本文来记录学习下 WebSocket 全双工通信的基本原理与鉴权机制，并分析 WebSocket 常见的安全风险。</p>
 <h1 id="WebSocket"><a href="#WebSocket" class="headerlink" title="WebSocket"></a>WebSocket</h1><p>WebSocket 和 HTTP 一样，也是一种通讯协议，允许服务端主动向客户端推送数据。在 WebSocket API 中，浏览器和服务器只需要完成一次握手，两者之间就直接可以创建持久性的连接，并进行双向数据传输。</p>
 <h2 id="协议基础"><a href="#协议基础" class="headerlink" title="协议基础"></a>协议基础</h2><p>有很多网站为了实现推送技术，所用的技术都是 Ajax 轮询。轮询是在特定的的时间间隔（如每1秒），由浏览器对服务器发出 HTTP 请求，然后由服务器返回最新的数据给客户端的浏览器。这种传统的模式带来很明显的缺点，即浏览器需要不断的向服务器发出请求，然而 HTTP 请求可能包含较长的头部，其中真正有效的数据可能只是很小的一部分，显然这样会浪费很多的带宽等资源。</p>
 <p>WebSocket 协议是从 HTML5 开始提供的一种浏览器与服务器进行全双工通讯的网络技术，属于应用层协议。它基于TCP传输协议，并复用HTTP的握手通道。它能更好的节省服务器资源和带宽，并且能够更实时地进行通讯。<br><img src="https://img-blog.csdnimg.cn/4a7fe1ac3a5649ac9b3413233d86a22c.png" alt="在这里插入图片描述"><br>WebSocket 是真正意义上的全双工模式，也就是我们俗称的「长连接」。当完成握手连接后，客户端和服务端均可以主动的发起请求，回复响应，并且两边的传输都是相互独立的。</p>
@@ -228,110 +174,4 @@
 <li><a target="_blank" rel="noopener" href="https://security.tencent.com/index.php/blog/msg/119">WebSocket应用安全问题分析</a>；</li>
 <li><a target="_blank" rel="noopener" href="https://www.freebuf.com/vuls/328279.html">PortSwigger 基于 WebSocket 的漏洞讲解</a>。</li>
 </ol>
-
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://tr0e.github.io/WebSocket%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE%E5%9F%BA%E7%A1%80%E5%8E%9F%E7%90%86%E4%B8%8E%E6%BD%9C%E5%9C%A8%E5%AE%89%E5%85%A8%E5%A8%81%E8%83%81/" data-id="cl4bbca290001z0i94r5x2grr" class="article-share-link">Share</a>
-      
-      
-    </footer>
-  </div>
-  
-    
-<nav id="article-nav">
-  
-  
-    <a href="/hello-world/" id="article-nav-older" class="article-nav-link-wrap">
-      <strong class="article-nav-caption">Older</strong>
-      <div class="article-nav-title">Hello World</div>
-    </a>
-  
-</nav>
-
-  
-</article>
-
-</section>
-        
-          <aside id="sidebar">
-  
-    
-
-  
-    
-
-  
-    
-  
-    
-  <div class="widget-wrap">
-    <h3 class="widget-title">Archives</h3>
-    <div class="widget">
-      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">June 2022</a></li></ul>
-    </div>
-  </div>
-
-
-  
-    
-  <div class="widget-wrap">
-    <h3 class="widget-title">Recent Posts</h3>
-    <div class="widget">
-      <ul>
-        
-          <li>
-            <a href="/WebSocket%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE%E5%9F%BA%E7%A1%80%E5%8E%9F%E7%90%86%E4%B8%8E%E6%BD%9C%E5%9C%A8%E5%AE%89%E5%85%A8%E5%A8%81%E8%83%81/">WebSocket通信协议基础原理与潜在安全威胁</a>
-          </li>
-        
-          <li>
-            <a href="/hello-world/">Hello World</a>
-          </li>
-        
-      </ul>
-    </div>
-  </div>
-
-  
-</aside>
-        
-      </div>
-      <footer id="footer">
-  
-  <div class="outer">
-    <div id="footer-info" class="inner">
-      &copy; 2022 Tr0e<br>
-      Powered by <a href="http://hexo.io/" target="_blank">Hexo</a>
-    </div>
-  </div>
-</footer>
-    </div>
-    <nav id="mobile-nav">
-  
-    <a href="/" class="mobile-nav-link">Home</a>
-  
-    <a href="/archives" class="mobile-nav-link">Archives</a>
-  
-</nav>
-    
-
-<script src="//ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
-
-
-  
-<link rel="stylesheet" href="/fancybox/jquery.fancybox.css">
-
-  
-<script src="/fancybox/jquery.fancybox.pack.js"></script>
-
-
-
-
-<script src="/js/script.js"></script>
-
-
-
-
-  </div>
-</body>
-</html>
+</div></section><ul class="post-copyright"><li class="post-copyright-author"><strong>Post author: </strong>Tr0e</li><li class="post-copyright-link"><strong>Post link: </strong><a href="https://tr0e.github.io/WebSocket%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE%E5%9F%BA%E7%A1%80%E5%8E%9F%E7%90%86%E4%B8%8E%E6%BD%9C%E5%9C%A8%E5%AE%89%E5%85%A8%E5%A8%81%E8%83%81/" title="WebSocket通信协议基础原理与潜在安全威胁">https://tr0e.github.io/WebSocket%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE%E5%9F%BA%E7%A1%80%E5%8E%9F%E7%90%86%E4%B8%8E%E6%BD%9C%E5%9C%A8%E5%AE%89%E5%85%A8%E5%A8%81%E8%83%81/</a></li><li class="post-copyright-license"><strong>Copyright Notice: </strong>All articles in this blog are licensed under <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh" target="_blank" rel="noopener" title="CC BY-NC-SA 4.0 "><span class="icon iconify" data-icon="ri:creative-commons-line"></span><span class="icon iconify" data-icon="ri:creative-commons-by-line"></span><span class="icon iconify" data-icon="ri:creative-commons-nc-line"></span><span class="icon iconify" data-icon="ri:creative-commons-sa-line"></span></a> unless otherwise stated.</li></ul></article><div class="post-nav"><div class="post-nav-item"></div><div class="post-nav-item"><a class="post-nav-next" href="/hello-world/" rel="next" title="Hello World"><span class="post-nav-text">Hello World</span><span class="icon iconify" data-icon="ri:arrow-right-s-line"></span></a></div></div></div><div class="hty-card" id="comment"></div></main><footer class="sidebar-translate" id="footer"><div class="copyright"><span>&copy; 2019 – 2022 </span><span class="with-love" id="animate"><span class="icon iconify" data-icon="ri:cloud-line"></span></span><span class="author"> Tr0e</span></div><div class="powered"><span>Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a> v5.4.2</span><span class="footer-separator">|</span><span>Theme - <a rel="noopener" href="https://github.com/YunYouJun/hexo-theme-yun" target="_blank"><span>Yun</span></a> v1.10.4</span></div></footer></div><a class="hty-icon-button" id="back-to-top" aria-label="back-to-top" href="#"><span class="icon iconify" data-icon="ri:arrow-up-s-line"></span><svg class="progress-circle-container" viewBox="0 0 100 100"><circle class="progress-circle" id="progressCircle" cx="50" cy="50" r="48" fill="none" stroke="#0078E7" stroke-width="2" stroke-linecap="round"></circle></svg></a></body></html>
