@@ -33,7 +33,7 @@ document.addEventListener("pjax:success", initScrollReveal);
 <meta property="og:image" content="https://img-blog.csdnimg.cn/20210204172039663.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70#pic_center">
 <meta property="og:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210204172115473.png">
 <meta property="article:published_time" content="2021-02-04T09:29:23.000Z">
-<meta property="article:modified_time" content="2022-06-15T16:10:57.853Z">
+<meta property="article:modified_time" content="2022-07-03T13:32:19.028Z">
 <meta property="article:author" content="Tr0e">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:image" content="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210204135256163.png"><script>(function() {
@@ -64,6 +64,7 @@ IconifyProviders = {
 <p><strong>2、微信小程序安装包存放在哪？</strong></p>
 <p> 手机本地存放微信小程序安装包的具体目录位置为：</p>
 <pre class="language-javascript" data-language="javascript"><code class="language-javascript"><span class="token operator">/</span>data<span class="token operator">/</span>data<span class="token operator">/</span>com<span class="token punctuation">.</span>tencent<span class="token punctuation">.</span>mm<span class="token operator">/</span>MicroMsg<span class="token operator">/</span><span class="token constant">XXXXXXXX</span><span class="token punctuation">(</span>命名很长的文件夹，据说是用户随机码）<span class="token operator">/</span>appbrand<span class="token operator">/</span>pkg<span class="token operator">/</span></code></pre>
+
 <p>在这个目录下会发现一些 <code>xxxx.wxapkg</code> 类型的文件，这些就是微信小程序的安装包（二进制文件，还需要进一步进行反编译才能获得源码，类似获得 APP 的 APK 安装包后还需进一步进行反编译）。但是从上面的<code>/data/data</code>路径可以看出，必须 root 环境下的手机才能获取到目标文件。</p>
 <p><strong>3、如何反编译小程序安装包？</strong></p>
 <p>拿到 <code>xxxxx.wxapkg</code> 类型的微信小程序安装包以后，如何反编译获得小程序源码？大佬已经给我们写好现成的反编译脚本了，拿来即可食用：<a target="_blank" rel="noopener" href="https://gitee.com/ksd/wxappUnpacker">wxappUnpacker </a>。</p>
@@ -97,6 +98,7 @@ IconifyProviders = {
        <span class="token literal-property property">signature</span><span class="token operator">:</span> <span class="token function">c</span><span class="token punctuation">(</span><span class="token string">"SvZy7GUy5mqWk15l4F3Ivb1IXCWOhnAm"</span> <span class="token operator">+</span> e<span class="token punctuation">)</span>
    <span class="token punctuation">&#125;</span><span class="token punctuation">;</span>
 <span class="token punctuation">&#125;</span></code></pre>
+
 <p>3、接下来使用 MD5 在线加密验证一下，确认已成功找到签名算法：</p>
 <p><img src="https://img-blog.csdnimg.cn/2021020416422468.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70#pic_center" alt="在这里插入图片描述" loading="lazy"><br>既然知道目标小程序如何计算签名参数了，那么接下来，就可以使用 <a target="_blank" rel="noopener" href="https://tool.lu/timestamp/">在线生成时间戳的网站</a> 结合 <a target="_blank" rel="noopener" href="https://www.cmd5.com/hash.aspx?s=123456">MD5 在线转换网站</a> 来计算新的签名值，然后手动替换数据包中对应的时间戳、签名值进行重放。实测发现这种做法虽然可以成功重放数据包，然而，这样子测试的话特别折腾！</p>
 <p>难以忍受这种测试方式的龟速不说，进一步测试还发现，由于有时从浏览器复制计算出的新签名值到 BurpSuite 进行黏贴的过程手速太慢，会导致签名失效……此处猜测目标小程序的服务端应该校验了发送请求中包含的时间戳与服务器接收到请求时的时间戳之间的时间间隔，间隔太久的话则返回 400 报错。</p>
@@ -141,6 +143,7 @@ IconifyProviders = {
         <span class="token class-name">System</span><span class="token punctuation">.</span>out<span class="token punctuation">.</span><span class="token function">println</span><span class="token punctuation">(</span><span class="token string">"当前新的签名值 signature："</span><span class="token operator">+</span>now_sign<span class="token punctuation">)</span><span class="token punctuation">;</span>
     <span class="token punctuation">&#125;</span>
 <span class="token punctuation">&#125;</span></code></pre>
+
 <p>运行脚本获得新的时间戳和签名值如下：</p>
 <p><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210204170525870.png" alt="在这里插入图片描述" loading="lazy"><br>成功利用计算所得的新的时间戳和签名值进行数据包重放：</p>
 <p><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210204170605552.png" alt="在这里插入图片描述" loading="lazy"></p>
@@ -257,6 +260,7 @@ IconifyProviders = {
         <span class="token keyword">return</span> plainText<span class="token punctuation">;</span>
     <span class="token punctuation">&#125;</span>
 <span class="token punctuation">&#125;</span></code></pre>
+
 <p>来看看不使用插件的情况下，直接重放上面的数据包的结果：</p>
 <p><img src="https://img-blog.csdnimg.cn/20210204171631332.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl8zOTE5MDg5Nw==,size_16,color_FFFFFF,t_70#pic_center" alt="在这里插入图片描述" loading="lazy"><br>最后上大招，从 IDEA 导出、生成 jar 插件文件并导入 BurpSuite：</p>
 <p><img src="https://raw.githubusercontent.com/Tr0e/PiCGo/main/img/20210204172014399.png" alt="在这里插入图片描述" loading="lazy"><br>下面就是见证奇迹的时候了！来看看这时候重放数据包的效果：</p>
